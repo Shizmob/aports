@@ -59,7 +59,7 @@ prepare() {
 build() {
 	# build bbsuid
 	msg "Building bbsuid"
-	${CC:-${CROSS_COMPILE}gcc} ${CPPFLAGS} ${CFLAGS} \
+	${CC} ${CPPFLAGS} ${CFLAGS} \
 		${LDFLAGS} "$srcdir"/bbsuid.c -o "$_dyndir"/bbsuid
 
 	# build dynamic
@@ -69,8 +69,8 @@ build() {
 	[ "$CLIBC" = musl ] && sed -i \
 		-e "s/CONFIG_EXTRA_COMPAT=y/CONFIG_EXTRA_COMPAT=n/" \
 		.config
-	make -C "$builddir" O="$PWD" silentoldconfig
-	make
+	make -C "$builddir" O="$PWD" silentoldconfig CC="$CC"
+	make CC="$CC"
 
 	# build static
 	cd "$_staticdir"
@@ -82,8 +82,8 @@ build() {
 	[ "$CLIBC" = musl ] && sed -i \
 		-e "s/CONFIG_EXTRA_COMPAT=y/CONFIG_EXTRA_COMPAT=n/" \
 		.config
-	make -C "$builddir" O="$PWD" silentoldconfig
-	make
+	make -C "$builddir" O="$PWD" silentoldconfig CC="$CC"
+	make CC="$CC"
 	mv busybox busybox.static
 }
 
