@@ -68,12 +68,47 @@ if [ ! -d "$CBUILDROOT" ]; then
 	${SUDO_APK} add --quiet --initdb --arch $TARGET_ARCH --root $CBUILDROOT
 fi
 
-msg "Building cross-compiler"
+msg "Installing dependencies"
+
+if [ "$TOOLCHAIN" = llvm ]; then
+	apk add --virtual .bootstrap-deps compiler-rt clang clang-dev llvm4-utils
+	trap 'apk del .bootstrap-deps' EXIT INT
+fi
+
+msg "Building cross toolchain"
 
 # Build and install cross binutils (--with-sysroot)
 CTARGET=$TARGET_ARCH BOOTSTRAP=nobase APKBUILD=$(apkbuildname binutils) abuild -r
+export EXTRADEPENDS_BUILD="binutils-$TARGET_ARCH"
+export EXTRADEPENDS_TARGET
+export CROSSFLAGS
 
 case "$TOOLCHAIN" in
+llvm)
+	CROSSFLAGS="-fuse-ld=lld -Wno-unused-command-line-argument"
+
+	# libc headers and runtime libraries
+	for PKG in musl-dev compiler-rt; do
+		CHOST=$TARGET_ARCH BOOTSTRAP=nocc APKBUILD=$(apkbuildname ${PKG%-dev}) abuild -r
+		EXTRADEPENDS_TARGET="$EXTRADEPENDS_TARGET $PKG"
+	done
+
+	crtver=$(. $(apkbuildname compiler-rt) && echo $pkgver)
+	CROSSFLAGS="$CROSSFLAGS -resource-dir ${CBUILDROOT}/usr/lib/clang/$crtver --rtlib=compiler-rt"
+
+	# libc and libc++ headers
+	for PKG in musl libc++-dev; do
+		CHOST=$TARGET_ARCH BOOTSTRAP=nolibc APKBUILD=$(apkbuildname ${PKG%-dev}) abuild -r
+		EXTRADEPENDS_TARGET="$EXTRADEPENDS_TARGET $PKG"
+	done
+
+	CROSSFLAGS="$CROSSFLAGS -stdlib=libc++"
+
+	# unwinding and libc++
+	for PKG in llvm-libunwind libc++; do
+		CHOST=$TARGET_ARCH BOOTSTRAP=nobase APKBUILD=$(apkbuildname $PKG) abuild -r
+	done
+	;;
 gnu)
 	if ! CHOST=$TARGET_ARCH BOOTSTRAP=nolibc APKBUILD=$(apkbuildname musl) abuild up2date 2>/dev/null; then
 		# C-library headers for target
@@ -101,6 +136,7 @@ msg "Cross building base system"
 
 case "$TOOLCHAIN" in
 gnu)  implicit_deps="libgcc libstdc++ musl-dev";;
+llvm) implicit_deps="compiler-rt musl-dev libc++-dev llvm-libunwind-dev";;
 esac
 
 # add implicit target prerequisite packages
@@ -109,6 +145,7 @@ apk info --quiet --installed --root "$CBUILDROOT" $implicit_deps || \
 
 case "$TOOLCHAIN" in
 gnu)  toolchain="binutils mpf3 mpc1 isl cloog gcc";;
+llvm) toolchain="binutils llvm4 libxml2 isl clang lld";;
 esac
 
 # ordered cross-build
@@ -122,7 +159,6 @@ for PKG in fortify-headers linux-headers musl libc-dev pkgconf zlib gmp libffi \
 	   ncurses libcap-ng util-linux lvm2 popt xz cryptsetup kmod lddtree mkinitfs \
 	   community/go libffi community/ghc \
 	   $KERNEL_PKG ; do
-
 	CHOST=$TARGET_ARCH BOOTSTRAP=bootimage APKBUILD=$(apkbuildname $PKG) abuild -r
 
 	case "$PKG" in
@@ -131,7 +167,7 @@ for PKG in fortify-headers linux-headers musl libc-dev pkgconf zlib gmp libffi \
 		apk info --quiet --installed --root "$CBUILDROOT" $PKG || \
 			${SUDO_APK} --update --root "$CBUILDROOT" --repository "$REPODEST/main" add $PKG
 		;;
-	musl | gcc)
+	musl | gcc | clang)
 		# target libraries rebuilt, force upgrade
 		[ "$(apk upgrade --root "$CBUILDROOT" --repository "$REPODEST/main" --available --simulate | wc -l)" -gt 1 ] &&
 			${SUDO_APK} upgrade --root "$CBUILDROOT" --repository "$REPODEST/main" --available
