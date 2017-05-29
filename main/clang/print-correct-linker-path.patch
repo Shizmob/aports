@@ -1,0 +1,16 @@
+--- a/lib/Driver/Driver.cpp
++++ b/lib/Driver/Driver.cpp
+@@ -1180,7 +1180,12 @@
+   }
+ 
+   if (Arg *A = C.getArgs().getLastArg(options::OPT_print_prog_name_EQ)) {
+-    llvm::outs() << GetProgramPath(A->getValue(), TC) << "\n";
++    StringRef Prog(A->getValue());
++    // Special-case linker because of -fuse-ld= and default linker differences.
++    if (Prog.equals("ld"))
++      llvm::outs() << TC.GetLinkerPath() << "\n";
++    else
++      llvm::outs() << GetProgramPath(Prog, TC) << "\n";
+     return false;
+   }
+ 

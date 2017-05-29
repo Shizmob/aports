@@ -1,0 +1,24 @@
+--- a/lib/Driver/Tools.cpp
++++ b/lib/Driver/Tools.cpp
+@@ -3924,6 +3924,10 @@
+        !EffectiveTriple.isWatchOS()))
+     PIC = PIE = false;
+ 
++  // PIE isn't possible when simply doing a partial link.
++  if (Args.hasArg(options::OPT_r))
++     PIE = false;
++
+   if (Arg *A = Args.getLastArg(options::OPT_mdynamic_no_pic)) {
+     // This is a very special mode. It trumps the other modes, almost no one
+     // uses it, and it isn't even valid on any OS but Darwin.
+--- a/lib/Driver/Tools.cpp
++++ b/lib/Driver/Tools.cpp
+@@ -10071,7 +10071,7 @@
+   const llvm::Triple::ArchType Arch = ToolChain.getArch();
+   const bool isAndroid = ToolChain.getTriple().isAndroid();
+   const bool IsIAMCU = ToolChain.getTriple().isOSIAMCU();
+-  const bool IsPIE =
++  const bool IsPIE = !Args.hasArg(options::OPT_r) && !Args.hasArg(options::OPT_nopie) &&
+       !Args.hasArg(options::OPT_shared) && !Args.hasArg(options::OPT_static) &&
+       (Args.hasArg(options::OPT_pie) || ToolChain.isPIEDefault());
+   const bool HasCRTBeginEndFiles =

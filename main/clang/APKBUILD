@@ -3,23 +3,18 @@
 pkgname=clang
 # Note: Update together with llvm.
 pkgver=4.0.0
-pkgrel=1
+pkgrel=2
 _llvmver=${pkgver%%.*}
 pkgdesc="A C language family front-end for LLVM"
 arch="all"
 url="http://llvm.org/"
 license="UOI-NCSA"
-makedepends="
-	cmake
-	isl-dev
-	libxml2-dev
-	libxml2-utils
-	llvm-dev>=$_llvmver
-	llvm-static>=$_llvmver
-	paxmark
-	python2
-	"
+makedepends_host="isl-dev libxml2-dev llvm-dev llvm-static"
+makedepends_build="cmake paxmark python2"
 checkdepends="llvm-utils>=$_llvmver"
+if [ "$CBUILD" != "$CHOST" ]; then
+	makedepends_build="$makedepends_build $pkgname-dev llvm-utils llvm-config-$CTARGET_ARCH"
+fi
 depends_dev="$pkgname=$pkgver-r$pkgrel"
 subpackages="$pkgname-static $pkgname-dev $pkgname-doc $pkgname-libs
 	$pkgname-analyzer::noarch"
@@ -31,12 +26,33 @@ source="http://llvm.org/releases/$pkgver/cfe-$pkgver.src.tar.xz
 	clang-0005-Enable-PIE-by-default-for-alpine-linux.patch
 	clang-0006-Link-with-z-now-by-default-for-Alpine-Linux.patch
 	clang-0007-Enable-stack-protector-by-default-for-alpine-linux.patch
+	clang-0008-Dont-use-PIE-during-a-partial-link.patch
+	print-correct-linker-path.patch
 	"
 builddir="$srcdir/cfe-$pkgver.src"
+
+# See the LLVM APKBUILD for rationale.
+_prefix="usr/lib/llvm$_llvmver"
 
 build() {
 	mkdir -p "$builddir"/build
 	cd "$builddir"/build
+
+	local cross
+	if [ "$CBUILD" != "$CHOST" ]; then
+		cp /$_prefix/bin/llvm-config-$CTARGET_ARCH $CBUILDROOT/$_prefix/bin/llvm-config-$CTARGET_ARCH
+		CFLAGS="$CFLAGS -I $CBUILDROOT/usr/include -I $builddir/build/lib/clang/$pkgver/include"
+		CXXFLAGS="$CXXFLAGS -I $CBUILDROOT/usr/include -I $builddir/build/lib/clang/$pkgver/include"
+		cross="	-DCMAKE_CROSSCOMPILING=ON
+			-DCMAKE_SYSTEM_NAME=Linux
+			-DCMAKE_SYSTEM_PREFIX_PATH=$CBUILDROOT/usr;$CBUILDROOT
+			-DLLVM_CONFIG=$CBUILDROOT/$_prefix/bin/llvm-config-$CTARGET_ARCH
+			-DLLVM_TABLEGEN_EXE=/$_prefix/bin/llvm-tblgen
+			-DCLANG_TABLEGEN=/$_prefix/bin/clang-tblgen
+			-DCLANG_DEFAULT_RTLIB=compiler-rt
+			-DCLANG_DEFAULT_CXX_STDLIB=libc++
+			"
+	fi
 
 	cmake .. -Wno-dev \
 		-DCMAKE_BUILD_TYPE=Release \
@@ -50,7 +66,9 @@ build() {
 		-DCLANG_BUILD_EXAMPLES=OFF \
 		-DCLANG_INCLUDE_DOCS=ON \
 		-DCLANG_INCLUDE_TESTS=ON \
-		-DCLANG_PLUGIN_SUPPORT=ON
+		-DCLANG_PLUGIN_SUPPORT=ON \
+		$cross
+	rm -f $CBUILDROOT/$_prefix/bin/llvm-config-$CTARGET_ARCH
 
 	make clang-tblgen
 	make
@@ -67,6 +85,14 @@ package() {
 
 	make DESTDIR="$pkgdir" install
 	install -m 644 lib/libclang.a "$pkgdir"/usr/lib
+}
+
+dev() {
+	default_dev
+
+	cd "$builddir"/build
+	mkdir -p "$subpkgdir"/$_prefix/bin
+	cp bin/clang-tblgen "$subpkgdir"/$_prefix/bin
 }
 
 static() {
@@ -97,4 +123,6 @@ f06e351785d5755827459f17d3533415772ba84b4fbd4e49f418bafd20394e98d42b33a94aa34cff
 2998ab2dfbc3d5629dd7e65e7e39dc0ab96f61e24733cb8d2d4faee50a89f0f159ad44d10182ed4c96f060180f4e22510881f4e9eb00ced01278bde99adf3389  clang-0004-Add-musl-targets.patch
 6215080a796fa1fc6f7634781ef77fc245037880dbf075a656823aae5f9f4911294dc6d61172db399b063adbe445c38b73cec12fc66dbe16bd9d84dc58035846  clang-0005-Enable-PIE-by-default-for-alpine-linux.patch
 d151a6ecca470abb1f4dbc06910155db0688322475655e28cdcb9c0b21930c8bcaf166e9df9fc9dca1be654cf497587961e461d91ee2871fdf454bbd33c5fffe  clang-0006-Link-with-z-now-by-default-for-Alpine-Linux.patch
-f8c46bb64202c9233595362eb54288c30fbd28309308cbcafe1802dc50ffd676c7a70e6cbdbfd73464f872b40a90acd2eb736dcc9622fd434dbd44a5b0005027  clang-0007-Enable-stack-protector-by-default-for-alpine-linux.patch"
+f8c46bb64202c9233595362eb54288c30fbd28309308cbcafe1802dc50ffd676c7a70e6cbdbfd73464f872b40a90acd2eb736dcc9622fd434dbd44a5b0005027  clang-0007-Enable-stack-protector-by-default-for-alpine-linux.patch
+0862dafce57dbb0e78b8bc59c496ea0b9b3275aeb70ede6141ea2b4089e3d92f9c3c2d5ddc8fe04a1e2d6618ab10b5ad2e999b51d0b63db309859d5ec4957ebc  clang-0008-Dont-use-PIE-during-a-partial-link.patch
+99b1884acfacc6533147f323146abda0a782e2250bc3dd98be3ee685ace6841a8fc419b28649904c17a26f4ff7fae032ea32a4d1b22833d81fb90577a812b9b6  print-correct-linker-path.patch"
