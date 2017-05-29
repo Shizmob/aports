@@ -1,0 +1,11 @@
+--- a/cmake/Modules/AddCompilerRT.cmake
++++ b/cmake/Modules/AddCompilerRT.cmake
+@@ -187,7 +187,7 @@
+     endif()
+
+     add_library(${libname} ${type} ${sources_${libname}})
+-    set_target_compile_flags(${libname} ${extra_cflags_${libname}})
++    set_target_compile_flags(${libname} ${extra_cflags_${libname}} ${CMAKE_C_FLAGS})
+     set_target_link_flags(${libname} ${extra_link_flags_${libname}})
+     set_property(TARGET ${libname} APPEND PROPERTY
+                 COMPILE_DEFINITIONS ${LIB_DEFS})

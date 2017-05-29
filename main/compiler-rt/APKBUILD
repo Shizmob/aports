@@ -3,7 +3,7 @@
 pkgname=compiler-rt
 # Note: Update together with llvm.
 pkgver=4.0.0
-pkgrel=1
+pkgrel=2
 _llvmver=${pkgver%%.*}
 pkgdesc="LLVM compiler-rt runtime libraries"
 arch="all"
@@ -14,26 +14,53 @@ makedepends="
 	linux-headers
 	llvm-dev>=$_llvmver
 	llvm-static>=$_llvmver
+	llvm-libunwind>$_llvmver
 	python2
 	"
 checkdepends="llvm-utils>=$_llvmver"
 source="http://llvm.org/releases/$pkgver/$pkgname-$pkgver.src.tar.xz
-	dont-test-unbuilt-sanitizers.patch"
+	dont-test-unbuilt-sanitizers.patch
+	fix-cross-compile.patch
+	fix-x86-support.patch
+	fix-arm-support.patch
+	avoid-linux-header-deps.patch
+	crtbegin.c
+	crtend.c"
 builddir="$srcdir/$pkgname-$pkgver.src"
+_libdir=usr/lib/clang/$pkgver/lib
+
+if [ -n "$BOOTSTRAP" ]; then
+	CFLAGS="$CFLAGS -ffreestanding -nostdlib"
+	CXXFLAGS="$CXXFLAGS -ffreestanding -nostdlib"
+fi
 
 build() {
 	mkdir -p "$builddir"/build
 	cd "$builddir"/build
 
-	cmake .. \
+	local cmakedir
+	if [ -n "$BOOTSTRAP" ]; then
+		cmakedir=../lib/builtins
+	else
+		cmakedir=..
+	fi
+
+	cmake $cmakedir \
 		-DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_C_FLAGS="$CFLAGS" \
 		-DCMAKE_CXX_FLAGS="$CXXFLAGS" \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCOMPILER_RT_BUILD_SANITIZERS=OFF \
 		-DCOMPILER_RT_BUILD_XRAY=OFF \
-		-DCOMPILER_RT_INCLUDE_TESTS=ON
+		-DCOMPILER_RT_INCLUDE_TESTS=ON \
+		-DCOMPILER_RT_DEFAULT_TARGET_TRIPLE="$CHOST"
 	make
+
+	local src; for src in crtbegin crtend; do
+		$CC $CPPFLAGS $CFLAGS -fPIC -c "$srcdir"/$src.c -o $src.o
+		$CC $CPPFLAGS $CFLAGS -fPIC -DSHARED -c "$srcdir"/$src.c -o ${src}S.o
+		[ $src = crtbegin ] && cp $src.o ${src}T.o || true
+	done
 }
 
 check() {
@@ -48,12 +75,29 @@ package() {
 
 	cd "$pkgdir"
 
-	mkdir -p usr/lib/clang
-	case "$CARCH" in
-		ppc64le | s390x) ;;
-		*) mv usr/lib/linux usr/lib/clang/$pkgver;;
+	mkdir -p "$_libdir"
+	local arch="${CHOST_ARCH:-$CARCH}"
+	case "$arch" in
+	ppc64le | s390x) ;;
+	*)	mv usr/lib/linux "$_libdir"
 	esac
+	case "$arch" in
+	x86)
+		local narch="${CHOST%%-*}"
+		local lib; for lib in "$_libdir"/linux/lib*.a; do
+			local target="$(echo "$lib" | sed -e 's!i386!'$narch'!g')"
+			ln -s $(basename "$lib") "$target"
+		done
+	esac
+
+	mv "$builddir"/build/crt*.o usr/lib/clang/$pkgver
 }
 
 sha512sums="ed52436a2399ca82c1af46a523e89e88c23367f74cd110f0267af49a72aa4912ae8f48c6093e6b01c9ea68c48354a12201d26baf721d254fb017ddb98af2e3dd  compiler-rt-4.0.0.src.tar.xz
-b0c3dac34820e8b95f461c5b9025e154f2244237e38ed3fa482baea8233686e0c40c7ae8f572513161856313029db40566bf4d21f102a554e556b45d8d0ef794  dont-test-unbuilt-sanitizers.patch"
+b0c3dac34820e8b95f461c5b9025e154f2244237e38ed3fa482baea8233686e0c40c7ae8f572513161856313029db40566bf4d21f102a554e556b45d8d0ef794  dont-test-unbuilt-sanitizers.patch
+fd75c0aef1ed219da08728d3442d75b4806fe10e9691f3aa39b6569aa0a1ad8edd1bb31587e8719c768a9bab862a2cc10a24619d9304f94965efac6005a9cf05  fix-cross-compile.patch
+1f1ee4273262e26ca8de578ff9b4478df6cc00256ed757e1b4f9e7d69c0ef7762c95703e3859c33df3041bf550b32c1e12b1ec227d31a9d369a5975a275c2545  fix-x86-support.patch
+01d566e8567ec6dd8be7cf5e2d7d47f9c0a379e41c94e0b991c2be30904fcbb32498976700c55696e3c3352be56bc718b226828c876e87c189e3fa9accd24425  fix-arm-support.patch
+f1c8af7b810765d418b0a9ec74e7d9102bd254e9b06aa4db56c99e64274932a38950ba5a5904e20c21df36804384db245968574c86880cfb1257d4c1b05b4d3b  avoid-linux-header-deps.patch
+f19485a84425d6ade01736a4fbc0341b193cdeac5b8f92b71e58e52d5b12248531fef5572fec3c840e204fc5ec31259c81561e9ceed8f3cb3ffe4537600071ef  crtbegin.c
+cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e  crtend.c"
