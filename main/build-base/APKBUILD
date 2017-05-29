@@ -19,6 +19,12 @@ gnu|'')
 		depends="binutils-$CTARGET_ARCH gcc-$CTARGET_ARCH g++-$CTARGET_ARCH $depends"
 	fi
 	;;
+llvm)
+	depends="binutils clang compiler-rt libc++-dev $depends"
+	if [ "$CHOST" != "$CTARGET" ]; then
+		depends="binutils-$CTARGET_ARCH $depends"
+	fi
+	;;
 esac
 
 build() {
