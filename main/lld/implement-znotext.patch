@@ -1,0 +1,104 @@
+From 94990a25f4627b75e65069c037890576c2bcb61e Mon Sep 17 00:00:00 2001
+From: George Rimar <grimar@accesssoftek.com>
+Date: Thu, 9 Mar 2017 08:48:34 +0000
+Subject: [PATCH] [ELF] - Implemented -znotext
+
+gold linker manual describes them as:
+
+-z text Do not permit relocations in read-only segments
+-z notext Permit relocations in read-only segments (default)
+
+In LLD default is to not permit them. Patch implements -z notext.
+
+Differential revision: https://reviews.llvm.org/D30530
+
+git-svn-id: https://llvm.org/svn/llvm-project/lld/trunk@297366 91177308-0d34-0410-b5e6-96231b3b80d8
+---
+ ELF/Config.h                 |  1 +
+ ELF/Driver.cpp               |  1 +
+ ELF/Relocations.cpp          | 11 ++++++-----
+ ELF/SyntheticSections.cpp    |  2 ++
+ test/ELF/ztext-text-notext.s | 15 +++++++++++++++
+ 5 files changed, 25 insertions(+), 5 deletions(-)
+ create mode 100644 test/ELF/ztext-text-notext.s
+
+diff --git a/ELF/Config.h b/ELF/Config.h
+index 67c6c3510..ef184d508 100644
+--- a/ELF/Config.h
++++ b/ELF/Config.h
+@@ -142,6 +142,7 @@ struct Configuration {
+   bool ZNow;
+   bool ZOrigin;
+   bool ZRelro;
++  bool ZText;
+   bool ExitEarly;
+   bool ZWxneeded;
+   DiscardPolicy Discard;
+diff --git a/ELF/Driver.cpp b/ELF/Driver.cpp
+index e48177a13..e7913a087 100644
+--- a/ELF/Driver.cpp
++++ b/ELF/Driver.cpp
+@@ -552,6 +552,7 @@
+   Config->ZOrigin = hasZOption(Args, "origin");
+   Config->ZRelro = !hasZOption(Args, "norelro");
+   Config->ZStackSize = getZOptionValue(Args, "stack-size", -1);
++  Config->ZText = !hasZOption(Args, "notext");
+   Config->ZWxneeded = hasZOption(Args, "wxneeded");
+ 
+   Config->OFormatBinary = isOutputFormatBinary(Args);
+diff --git a/ELF/Relocations.cpp b/ELF/Relocations.cpp
+index c1631c676..7d39b08ee 100644
+--- a/ELF/Relocations.cpp
++++ b/ELF/Relocations.cpp
+@@ -476,11 +476,12 @@
+   // only memory. We can hack around it if we are producing an executable and
+   // the refered symbol can be preemepted to refer to the executable.
+   if (Config->Shared || (Config->Pic && !isRelExpr(Expr))) {
+-    error(S.getLocation(RelOff) + ": can't create dynamic relocation " +
+-          toString(Type) + " against " +
+-          (Body.getName().empty() ? "local symbol in readonly segment"
+-                                  : "symbol '" + toString(Body) + "'") +
+-          " defined in " + toString(Body.File));
++    if (Config->ZText)
++      error(S.getLocation(RelOff) + ": can't create dynamic relocation " +
++            toString(Type) + " against " +
++            (Body.getName().empty() ? "local symbol in readonly segment"
++                                    : "symbol '" + toString(Body) + "'") +
++            " defined in " + toString(Body.File));
+     return Expr;
+   }
+   if (Body.getVisibility() != STV_DEFAULT) {
+diff --git a/ELF/SyntheticSections.cpp b/ELF/SyntheticSections.cpp
+index a642345b6..5011796f0 100644
+--- a/ELF/SyntheticSections.cpp
++++ b/ELF/SyntheticSections.cpp
+@@ -1111,6 +1111,8 @@ template <class ELFT> void DynamicSection<ELFT>::finalizeContents() {
+   add({DT_SYMENT, sizeof(Elf_Sym)});
+   add({DT_STRTAB, In<ELFT>::DynStrTab});
+   add({DT_STRSZ, In<ELFT>::DynStrTab->getSize()});
++  if (!Config->ZText)
++    add({DT_TEXTREL, (uint64_t)0});
+   if (In<ELFT>::GnuHashTab)
+     add({DT_GNU_HASH, In<ELFT>::GnuHashTab});
+   if (In<ELFT>::HashTab)
+diff --git a/test/ELF/ztext-text-notext.s b/test/ELF/ztext-text-notext.s
+new file mode 100644
+index 000000000..cdd5b67d6
+--- /dev/null
++++ b/test/ELF/ztext-text-notext.s
+@@ -0,0 +1,15 @@
++# REQUIRES: x86
++# RUN: llvm-mc -filetype=obj -triple=x86_64-pc-linux %s -o %t.o
++# RUN: ld.lld -z notext %t.o -o %t -shared
++# RUN: llvm-readobj  -dynamic-table -r %t | FileCheck %s
++
++# CHECK:      Relocations [
++# CHECK-NEXT:    Section {{.*}} .rela.dyn {
++# CHECK-NEXT:      0x1000 R_X86_64_RELATIVE - 0x1000
++# CHECK-NEXT:    }
++# CHECK-NEXT:  ]
++# CHECK: DynamicSection [
++# CHECK: 0x0000000000000016 TEXTREL 0x0
++
++foo:
++.quad foo
