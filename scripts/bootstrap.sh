@@ -8,16 +8,8 @@ SUDO_APK=abuild-apk
 # optional cross build packages
 KERNEL_PKG="linux-firmware linux-vanilla"
 
-# get abuild configurables
+# check abuild existence
 [ -e /usr/share/abuild/functions.sh ] || (echo "abuild not found" ; exit 1)
-CBUILDROOT="$(CTARGET=$TARGET_ARCH . /usr/share/abuild/functions.sh ; echo $CBUILDROOT)"
-. /usr/share/abuild/functions.sh
-[ -z "$CBUILD_ARCH" ] && die "abuild is too old (use 2.29.0 or later)"
-[ -z "$CBUILDROOT" ] && die "CBUILDROOT not set for $TARGET_ARCH"
-
-# deduce aports directory
-[ -z "$APORTS" ] && APORTS=$(realpath $(dirname $0)/../)
-[ -e "$APORTS/main/build-base" ] || die "Unable to deduce aports base checkout"
 
 apkbuildname() {
 	local repo="${1%%/*}"
@@ -55,6 +47,16 @@ by running this with the target arch as parameter, e.g.:
 EOF
 	return 1
 fi
+
+# get abuild configurables
+CBUILDROOT="$(CTARGET=$TARGET_ARCH . /usr/share/abuild/functions.sh ; echo $CBUILDROOT)"
+. /usr/share/abuild/functions.sh
+[ -z "$CBUILD_ARCH" ] && die "abuild is too old (use 2.29.0 or later)"
+[ -z "$CBUILDROOT" ] && die "CBUILDROOT not set for $TARGET_ARCH"
+
+# deduce aports directory
+[ -z "$APORTS" ] && APORTS=$(realpath $(dirname $0)/../)
+[ -e "$APORTS/main/build-base" ] || die "Unable to deduce aports base checkout"
 
 if [ ! -d "$CBUILDROOT" ]; then
 	msg "Creating sysroot in $CBUILDROOT"
