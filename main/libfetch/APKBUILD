@@ -22,7 +22,7 @@ prepare() {
 
 build () { 
 	cd "$_builddir"
-	make
+	make CC="${CC:-cc}" LD="${LD:-${CC:-cc}}"
 }
 
 package() {
