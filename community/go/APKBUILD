@@ -4,7 +4,7 @@ pkgname=go
 pkgver=1.8.1
 # This should be the latest commit on the corresponding release branch
 _toolsver="5682db0e919ed9cfc6f52ac32e170511a106eb3b"
-pkgrel=0
+pkgrel=1
 pkgdesc="Go programming language compiler"
 url="http://www.golang.org/"
 arch="all"
@@ -20,6 +20,8 @@ source="http://golang.org/dl/go${pkgver/_/}.src.tar.gz
 	go-tools-${pkgver/_/}.tar.gz::https://github.com/golang/tools/archive/${_toolsver}.tar.gz
 	default-buildmode-pie.patch
 	set-external-linker.patch
+	no-nostdlib.patch
+	recognize-clang-nopie-arg.patch
 	"
 
 # NOTE: building go for x86 with grsec kernel requires:
@@ -34,11 +36,6 @@ if [ "$CBUILD" = "$CTARGET" ]; then
 else
 	pkgname="go-bootstrap"
 	makedepends="go $makedepends"
-	# Go expect host linker instead of the cross-compiler
-	export CC_FOR_TARGET="$CC"
-	export CC="${HOSTLD:-gcc}"
-	export CXX="${HOSTLD:-g++}"
-	export LD="${HOSTLD:-ld}"
 fi
 
 _tooldir="$srcdir"/tools-${_toolsver}
@@ -49,6 +46,18 @@ done
 builddir="$srcdir"/go
 build() {
 	cd "$builddir/src"
+
+	if [ "$CBUILD" != "$CTARGET" ]; then
+		# Go's build system can't deal with toolchain variables containing spaces,
+		# so create some wrapper files.
+		local cc ccval; for cc in CC CXX HOSTCC HOSTCXX; do
+			ccval="$(eval "echo \$$cc")"
+			test -n "$ccval" || continue
+			printf '#!/bin/sh\nexec %s "$@"' "$(eval "echo \$$cc")" > "$srcdir/$cc"
+			chmod +x "$srcdir/$cc"
+			eval "export $cc=$srcdir/$cc"
+		done
+	fi
 
 	case "$CTARGET_ARCH" in
 	aarch64)export GOARCH="arm64" ;;
@@ -72,6 +81,12 @@ build() {
 			break
 		fi
 	done
+
+	# Go expect host linker instead of the cross-compiler
+	export CC_FOR_TARGET="${CC:-cc}"
+	export CXX_FOR_TARGET="${CXX:-c++}"
+	export CC="${HOSTCC:-cc}"
+	export CXX="${HOSTCXX:-c++}"
 
 	./make.bash
 	for os in $_gocross; do
@@ -170,4 +185,6 @@ _crosspkg() {
 sha512sums="f01fe7b35ac23101610f6fc169b88dafe2edc49b3b044d5d0aff771b05dcb2c8d2e7a5090ed6dbe67f861e78e792ace32e209ed464399ca02dcd186b13ec8037  go1.8.1.src.tar.gz
 343fca47f250278b22df1c1cd92cce91e01009043d05d8ccce095e4386fa0f5ca8ccaa58232635332c7288ceca9d2a240f774f8bb3b08129a681a582cba60248  go-tools-1.8.1.tar.gz
 13cd386c38875b951da4057586007f3c67503dc79ddf57befbf763af85ec2cd2a2e6b00614450c179c93f1f8747ee7456ee412adccd08a5f115b33812598a148  default-buildmode-pie.patch
-ab06554c1c37fda2bf0112d7343f253111911e07cdd77805e9811aaabe298980a0fac60f6294e68b95df017ab40d73655874e3d1d230c54181d6ffc7639e3ed6  set-external-linker.patch"
+ab06554c1c37fda2bf0112d7343f253111911e07cdd77805e9811aaabe298980a0fac60f6294e68b95df017ab40d73655874e3d1d230c54181d6ffc7639e3ed6  set-external-linker.patch
+aa1ac9492791f6bdeeecbdbec188a556f61678fd13f2642b2dfafcf36bfbdd72e0593aa2815b3576552a9482c18be63e32bb91647cec51a52acec6a6d7d20f4e  no-nostdlib.patch
+b7b328dc1858807fb01fbbc32178a99ee134dd615bff63cc47890277057cc1a2b17076b6f4e32ac39f7addb2c53c0ff2c0123044d087f59115d2d617bc638320  recognize-clang-nopie-arg.patch"

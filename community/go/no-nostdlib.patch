@@ -1,0 +1,14 @@
+--- a/src/cmd/go/build.go
++++ b/src/cmd/go/build.go
+@@ -2955,9 +2956,9 @@
+ 		out = out + ".o"
+ 
+ 	case "c-shared":
+-		ldflags = append(ldflags, "-shared", "-nostdlib", "-Wl,--whole-archive", "-lgolibbegin", "-Wl,--no-whole-archive", "-lgo", "-lgcc_s", "-lgcc", "-lc", "-lgcc")
++		ldflags = append(ldflags, "-shared", "-Wl,--whole-archive", "-lgolibbegin", "-Wl,--no-whole-archive", "-lgo")
+ 	case "shared":
+-		ldflags = append(ldflags, "-zdefs", "-shared", "-nostdlib", "-lgo", "-lgcc_s", "-lgcc", "-lc")
++		ldflags = append(ldflags, "-zdefs", "-shared", "-lgo")
+ 
+ 	default:
+ 		fatalf("-buildmode=%s not supported for gccgo", buildmode)
