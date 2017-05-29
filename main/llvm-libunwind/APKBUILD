@@ -4,7 +4,7 @@ pkgname=llvm-libunwind
 _pkgname=libunwind
 pkgver=4.0.0
 _llvmver=${pkgver%%.*}
-pkgrel=1
+pkgrel=2
 pkgdesc="LLVM version of libunwind library"
 url="http://llvm.org/"
 arch="all !ppc64le !s390x"
@@ -17,6 +17,11 @@ source="http://www.llvm.org/releases/$pkgver/$_pkgname-$pkgver.src.tar.xz
 builddir="$srcdir/$_pkgname-$pkgver.src"
 options="!check"  # no working testsuite provided
 
+if [ -n "$BOOTSTRAP" ]; then
+	CFLAGS="$CFLAGS -ffreestanding -nostdlib"
+	CXXFLAGS="$CXXFLAGS -ffreestanding -nostdlib"
+fi
+
 build() {
 	cd "$builddir"
 
@@ -25,6 +30,7 @@ build() {
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_C_FLAGS="$CFLAGS" \
 		-DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+		-DLLVM_ENABLE_LIBCXX=ON \
 		-DLIBUNWIND_HAS_NODEFAULTLIBS_FLAG=OFF
 	make
 }
