@@ -1,0 +1,68 @@
+From 1662a857dbd02c4ec3fea5ae9b55805e87102c52 Mon Sep 17 00:00:00 2001
+From: Petr Hosek <phosek@chromium.org>
+Date: Wed, 5 Apr 2017 22:53:05 +0000
+Subject: [PATCH] [CMake][libcxx] Use builtins rather than gcc_s when
+ compiler-rt is requested
+
+When compiler-rt is requested, we should attempt to link compiler-rt
+builtins library rather than gcc_s.
+
+Differential Revision: https://reviews.llvm.org/D31617
+
+git-svn-id: https://llvm.org/svn/llvm-project/libcxx/trunk@299599 91177308-0d34-0410-b5e6-96231b3b80d8
+---
+ cmake/Modules/HandleCompilerRT.cmake | 5 ++++-
+ cmake/config-ix.cmake                | 4 +++-
+ lib/CMakeLists.txt                   | 7 ++++++-
+ 3 files changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/cmake/Modules/HandleCompilerRT.cmake b/cmake/Modules/HandleCompilerRT.cmake
+index 973000831..41cdd44b3 100644
+--- a/libcxx/cmake/Modules/HandleCompilerRT.cmake
++++ b/libcxx/cmake/Modules/HandleCompilerRT.cmake
+@@ -3,8 +3,11 @@ function(find_compiler_rt_library name dest)
+     message(FATAL_ERROR "LIBCXX_COMPILE_FLAGS must be defined when using this function")
+   endif()
+   set(dest "" PARENT_SCOPE)
+-  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXX_COMPILE_FLAGS}
++  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${TARGET_TRIPLE} ${LIBCXX_COMPILE_FLAGS}
+       "--rtlib=compiler-rt" "--print-libgcc-file-name")
++  if (CMAKE_CXX_COMPILER_ID MATCHES Clang AND CMAKE_CXX_COMPILER_TARGET)
++    list(APPEND CLANG_COMMAND "--target=${CMAKE_CXX_COMPILER_TARGET}")
++  endif()
+   execute_process(
+       COMMAND ${CLANG_COMMAND}
+       RESULT_VARIABLE HAD_ERROR
+diff --git a/cmake/config-ix.cmake b/cmake/config-ix.cmake
+index ed9d3e8e8..5f31cfac3 100644
+--- a/libcxx/cmake/config-ix.cmake
++++ b/libcxx/cmake/config-ix.cmake
+@@ -31,7 +31,9 @@ if (LIBCXX_SUPPORTS_NODEFAULTLIBS_FLAG)
+     list(APPEND CMAKE_REQUIRED_LIBRARIES c)
+   endif ()
+   if (LIBCXX_USE_COMPILER_RT)
+-    list(APPEND CMAKE_REQUIRED_LIBRARIES -rtlib=compiler-rt)
++    list(APPEND CMAKE_REQUIRED_FLAGS -rtlib=compiler-rt)
++    find_compiler_rt_library(builtins LIBCXX_BUILTINS_LIBRARY)
++    list(APPEND CMAKE_REQUIRED_LIBRARIES "${LIBCXX_BUILTINS_LIBRARY}")
+   elseif (LIBCXX_HAS_GCC_S_LIB)
+     list(APPEND CMAKE_REQUIRED_LIBRARIES gcc_s)
+   endif ()
+diff --git a/lib/CMakeLists.txt b/lib/CMakeLists.txt
+index e6f3b4c55..bc15be679 100644
+--- a/libcxx/lib/CMakeLists.txt
++++ b/libcxx/lib/CMakeLists.txt
+@@ -83,7 +83,12 @@ add_library_flags_if(LIBCXX_HAS_PTHREAD_LIB pthread)
+ add_library_flags_if(LIBCXX_HAS_C_LIB c)
+ add_library_flags_if(LIBCXX_HAS_M_LIB m)
+ add_library_flags_if(LIBCXX_HAS_RT_LIB rt)
+-add_library_flags_if(LIBCXX_HAS_GCC_S_LIB gcc_s)
++if (LIBCXX_USE_COMPILER_RT)
++  find_compiler_rt_library(builtins LIBCXX_BUILTINS_LIBRARY)
++  add_library_flags_if(LIBCXX_BUILTINS_LIBRARY "${LIBCXX_BUILTINS_LIBRARY}")
++else()
++  add_library_flags_if(LIBCXX_HAS_GCC_S_LIB gcc_s)
++endif()
+ add_library_flags_if(LIBCXX_HAVE_CXX_ATOMICS_WITH_LIB atomic)
+ 
+ # Add the unwinder library.

@@ -3,17 +3,18 @@
 # Maintainer: Shiz <hi@shiz.me>
 pkgname=libc++
 pkgver=4.0.0
-pkgrel=0
+pkgrel=1
 _llvmver=${pkgver%%.*}
 pkgdesc="A new implementation of the C++ standard library, targeting C++11"
 url="http://libcxx.llvm.org/"
 arch="all !ppc64le !s390x"
 license="UOI-NCSA"
-makedepends="cmake
-	clang>=$_llvmver
+makedepends_build="cmake
+	clang
+	python2
 	llvm-dev>=$_llvmver
-	llvm-libunwind-dev>=$_llvmver
 	llvm-static>=$_llvmver"
+[ "$BOOTSTRAP" = nolibc ] || makedepends_host="llvm-libunwind-dev"
 checkdepends="llvm-utils>=$_llvmver"
 subpackages="$pkgname-dev"
 source="http://releases.llvm.org/$pkgver/libcxx-$pkgver.src.tar.xz
@@ -21,7 +22,12 @@ source="http://releases.llvm.org/$pkgver/libcxx-$pkgver.src.tar.xz
 	check-for-musl-libcs-max_align_t.patch
 	avoid-strtoll_l.patch
 	disable-broken-tests.patch
-	no-libunwind-sources.patch"
+	no-libunwind-sources.patch
+	compiler-rt-support.patch
+	compiler-rt-link.patch
+	compiler-rt-checks.patch
+	compiler-rt-abi-support.patch
+	compiler-rt-abi-checks.patch"
 builddir="$srcdir"
 _cxxdir="$srcdir/libcxx-$pkgver.src"
 _abidir="$srcdir/libcxxabi-$pkgver.src"
@@ -30,6 +36,11 @@ _abidir="$srcdir/libcxxabi-$pkgver.src"
 case "$CARCH" in
 	armhf) options="!check";;
 esac
+
+if [ "$BOOTSTRAP" = nolibc ]; then
+	pkgname=$pkgname-dev
+	subpackages=
+fi
 
 prepare() {
 	ln -s "$_cxxdir" "$srcdir"/libcxx
@@ -44,37 +55,56 @@ prepare() {
 # create libc++abi packages. If something arises that depends on libc++abi,
 # this may change, but for now this is the simplest approach.
 build() {
-	mkdir -p "$_abidir"/build
-	cd "$_abidir"/build
-	cmake .. \
-		-DCMAKE_BUILD_TYPE=MinSizeRel \
-		-DCMAKE_INSTALL_PREFIX=/usr \
-		-DCMAKE_CXX_COMPILER=clang++ \
-		-DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-		-DCMAKE_C_COMPILER=clang \
-		-DCMAKE_C_FLAGS="$CFLAGS" \
-		-DLIBCXXABI_USE_LLVM_UNWINDER=ON \
-		-DLIBCXXABI_LIBUNWIND_INCLUDES=/usr/include \
-		-DLIBCXXABI_LIBCXX_INCLUDES="$_cxxdir"/include \
-		-DLIBCXXABI_LIBCXX_LIBRARY_PATH="$_cxxdir"/build/lib \
-		-DLIBCXXABI_INCLUDE_TESTS=1
-	make
+	local bootstrap
+	if [ -n "$BOOTSTRAP" ]; then
+		bootstrap="-DCMAKE_C_COMPILER_WORKS=ON -DCMAKE_CXX_COMPILER_WORKS=ON -DCMAKE_REQUIRED_FLAGS=-nostdlib"
+	fi
+
+	# make sure we compile with clang.
+	[ -n "$CC" ] || export CC=clang
+	[ -n "$CXX" ] || export CXX=clang++
+
+	if [ "$BOOTSTRAP" != nolibc ]; then
+		mkdir -p "$_abidir"/build
+		cd "$_abidir"/build
+		cmake .. \
+			-DCMAKE_BUILD_TYPE=MinSizeRel \
+			-DCMAKE_INSTALL_PREFIX=/usr \
+			-DCMAKE_C_FLAGS="$CFLAGS" \
+			-DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+			-DLLVM_COMPILER_CHECKED=ON \
+			-DLIBCXXABI_TARGET_TRIPLE="$CHOST" \
+			-DLIBCXXABI_USE_LLVM_UNWINDER=ON \
+			-DLIBCXXABI_LIBUNWIND_INCLUDES="$CBUILDROOT"/usr/include \
+			-DLIBCXXABI_LIBCXX_INCLUDES="$_cxxdir"/include \
+			-DLIBCXXABI_LIBCXX_LIBRARY_PATH="$_cxxdir"/build/lib \
+			-DLIBCXXABI_INCLUDE_TESTS=1 \
+			$bootstrap
+		make
+	else
+		bootstrap="$bootstrap
+			-DLIBCXX_INSTALL_LIBRARY=OFF
+			-DLIBCXX_INSTALL_HEADERS=ON
+		"
+	fi
 
 	mkdir -p "$_cxxdir"/build
 	cd "$_cxxdir"/build
 	cmake .. \
 		-DCMAKE_BUILD_TYPE=MinSizeRel \
 		-DCMAKE_INSTALL_PREFIX=/usr \
-		-DCMAKE_CXX_COMPILER=clang++ \
-		-DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-		-DCMAKE_C_COMPILER=clang \
 		-DCMAKE_C_FLAGS="$CFLAGS" \
+		-DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+		-DLLVM_COMPILER_CHECKED=ON \
+		-DLIBCXXABI_USE_LLVM_UNWINDER=ON \
+		-DLIBCXX_TARGET_TRIPLE="$CHOST" \
+		-DLIBCXX_USE_COMPILER_RT=ON \
 		-DLIBCXX_HAS_MUSL_LIBC=ON \
-		-DLIBCXX_HAS_GCC_S_LIB=OFF \
 		-DLIBCXX_CXX_ABI=libcxxabi \
 		-DLIBCXX_CXX_ABI_INCLUDE_PATHS="$_abidir"/include \
 		-DLIBCXX_CXX_ABI_LIBRARY_PATH="$_abidir"/build/lib \
-		-DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=ON  # needed to make -static work.
+		$bootstrap
+	[ "$BOOTSTRAP" = nolibc ] && return 0
 	make
 }
 
@@ -89,6 +119,14 @@ check() {
 }
 
 package() {
+	if [ "$BOOTSTRAP" = nolibc ]; then
+		cd "$_cxxdir"/build
+		make install-cxx-headers DESTDIR="$pkgdir"
+		return
+	fi
+
+	cd "$_abidir"/build
+	make install DESTDIR="$pkgdir"
 	cd "$_cxxdir"/build
 	make install DESTDIR="$pkgdir"
 }
@@ -98,4 +136,9 @@ b69933a0bde00321323e98962cd54b78a48bc5e93448d7a5124cb5ef844497ba7648cd92fcbe4761
 6ad979fd7095940759cd1f51cc6d1d9a98dd78ecc51191f4d7bdbca834fcad7e5371ac6199512ca297267868bfbe1872258a903a03c98e7aa46700d31e79d24a  check-for-musl-libcs-max_align_t.patch
 212bbc1bcbc4628754bdd5bc8a9109fa0032790a3c80517a647a26ee27c22daa417303a72b6cc92cfc099dcc7fd9a36e9d8899165ebe4a5ab14030eaa596bc9c  avoid-strtoll_l.patch
 c3e4b9d68a9b7c7066f3a63c756fe682749d8d8abbfdf629d7ed085bbb5f69a1c2d79d0e53f036e0a5d9e501c48df15708560f3a4e6d68ac91c577572d181ccd  disable-broken-tests.patch
-7d514667bbbb3b32286b91c1b96126cc795ea37db0c6ecdb6502422a4bd6a55553ff2b85ba6cec2969d9d88402713cc4544b9b895b516693a0e5f31a5d628da4  no-libunwind-sources.patch"
+7d514667bbbb3b32286b91c1b96126cc795ea37db0c6ecdb6502422a4bd6a55553ff2b85ba6cec2969d9d88402713cc4544b9b895b516693a0e5f31a5d628da4  no-libunwind-sources.patch
+df147cf76f244ae5c389b827e7912c6b2af1095f5e9aa2739041189ae54f9078eb31761a7f8e37d1479f795bb0b3f0c1763d3b55679113bb36bc5c99eb8dade5  compiler-rt-support.patch
+8b14712990187f3ef31fa63240ae7744a9743f979eb81fb4b86b40816ea9152896b5d633d5d763b083d50206aebbc81e99b677fce1dd401d627763ab659b37a2  compiler-rt-link.patch
+d17ce4e3a6841f16db9e14facb26d0306f24f0746b11ac1ff65cb6c4244f4ce437cd6f06afb1e173dbc9c7d02b92791c40da9fd88ab1d9b65063ec88c740e184  compiler-rt-checks.patch
+ac643e254c483303ba48d8b9c57cf7ad6b6200e7f73df54d2649f8ce74e72d00b58bf7a3f0357657136f1aa8f58ee8387998da61822ea5bcea472abf188ca299  compiler-rt-abi-support.patch
+17347f10ec1a80368cfc0cccb8f0d7a02b2b310b4e0c88b4bfc9d24bb4f045da7bdc06d6abb7043fe187e3fef380c45ab11182917c24dd3ed7c9d3dd2b0eeeb3  compiler-rt-abi-checks.patch"

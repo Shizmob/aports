@@ -1,0 +1,174 @@
+From a917419dd962fed0a36717eb478cc05b4cf3a666 Mon Sep 17 00:00:00 2001
+From: Petr Hosek <phosek@chromium.org>
+Date: Fri, 7 Apr 2017 20:10:41 +0000
+Subject: [PATCH] [CMake][libcxxabi] Use -nodefaultlibs for CMake checks
+
+Since libc++abi is built with -nodefaultlibs, we should be using this
+option even for CMake checks to avoid any inconsistency and also to
+avoid dependency on a working C++ standard library just for the setting
+up the build itself. The implementation is largely similar to the one
+used by libc++.
+
+Differential Revision: https://reviews.llvm.org/D31639
+
+git-svn-id: https://llvm.org/svn/llvm-project/libcxxabi/trunk@299797 91177308-0d34-0410-b5e6-96231b3b80d8
+---
+ CMakeLists.txt                       |  8 +++++
+ cmake/Modules/HandleCompilerRT.cmake | 58 ++++++++++++++++++++++++++++++++++++
+ cmake/config-ix.cmake                | 38 +++++++++++++++++++----
+ 3 files changed, 99 insertions(+), 5 deletions(-)
+ create mode 100644 cmake/Modules/HandleCompilerRT.cmake
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 162db8e..7e3d97c 100644
+--- a/libcxxabi/CMakeLists.txt
++++ b/libcxxabi/CMakeLists.txt
+@@ -8,6 +8,13 @@ if(POLICY CMP0042)
+   cmake_policy(SET CMP0042 NEW) # Set MACOSX_RPATH=YES by default
+ endif()
+ 
++# Add path for custom modules
++set(CMAKE_MODULE_PATH
++  "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
++  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules"
++  ${CMAKE_MODULE_PATH}
++  )
++
+ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+   project(libcxxabi)
+ 
+@@ -124,6 +131,7 @@ endif()
+ #===============================================================================
+ # Setup CMake Options
+ #===============================================================================
++include(HandleCompilerRT)
+ 
+ # Define options.
+ option(LIBCXXABI_ENABLE_EXCEPTIONS "Use exceptions." ON)
+diff --git a/cmake/Modules/HandleCompilerRT.cmake b/cmake/Modules/HandleCompilerRT.cmake
+new file mode 100644
+index 0000000..557c69d
+--- /dev/null
++++ b/libcxxabi/cmake/Modules/HandleCompilerRT.cmake
+@@ -0,0 +1,58 @@
++function(find_compiler_rt_library name dest)
++  if (NOT DEFINED LIBCXXABI_COMPILE_FLAGS)
++    message(FATAL_ERROR "LIBCXXABI_COMPILE_FLAGS must be defined when using this function")
++  endif()
++  set(dest "" PARENT_SCOPE)
++  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${TARGET_TRIPLE} ${LIBCXXABI_COMPILE_FLAGS}
++      "--rtlib=compiler-rt" "--print-libgcc-file-name")
++  if (CMAKE_CXX_COMPILER_ID MATCHES Clang AND CMAKE_CXX_COMPILER_TARGET)
++    list(APPEND CLANG_COMMAND "--target=${CMAKE_CXX_COMPILER_TARGET}")
++  endif()
++  execute_process(
++      COMMAND ${CLANG_COMMAND}
++      RESULT_VARIABLE HAD_ERROR
++      OUTPUT_VARIABLE LIBRARY_FILE
++  )
++  string(STRIP "${LIBRARY_FILE}" LIBRARY_FILE)
++  string(REPLACE "builtins" "${name}" LIBRARY_FILE "${LIBRARY_FILE}")
++  if (NOT HAD_ERROR AND EXISTS "${LIBRARY_FILE}")
++    message(STATUS "Found compiler-rt library: ${LIBRARY_FILE}")
++    set(${dest} "${LIBRARY_FILE}" PARENT_SCOPE)
++  else()
++    message(STATUS "Failed to find compiler-rt library")
++  endif()
++endfunction()
++
++function(find_compiler_rt_dir dest)
++  if (NOT DEFINED LIBCXXABI_COMPILE_FLAGS)
++    message(FATAL_ERROR "LIBCXXABI_COMPILE_FLAGS must be defined when using this function")
++  endif()
++  set(dest "" PARENT_SCOPE)
++  if (APPLE)
++    set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXXABI_COMPILE_FLAGS}
++        "-print-file-name=lib")
++    execute_process(
++        COMMAND ${CLANG_COMMAND}
++        RESULT_VARIABLE HAD_ERROR
++        OUTPUT_VARIABLE LIBRARY_DIR
++    )
++    string(STRIP "${LIBRARY_DIR}" LIBRARY_DIR)
++    set(LIBRARY_DIR "${LIBRARY_DIR}/darwin")
++  else()
++    set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXXABI_COMPILE_FLAGS}
++        "--rtlib=compiler-rt" "--print-libgcc-file-name")
++    execute_process(
++        COMMAND ${CLANG_COMMAND}
++        RESULT_VARIABLE HAD_ERROR
++        OUTPUT_VARIABLE LIBRARY_FILE
++    )
++    string(STRIP "${LIBRARY_FILE}" LIBRARY_FILE)
++    get_filename_component(LIBRARY_DIR "${LIBRARY_FILE}" DIRECTORY)
++  endif()
++  if (NOT HAD_ERROR AND EXISTS "${LIBRARY_DIR}")
++    message(STATUS "Found compiler-rt directory: ${LIBRARY_DIR}")
++    set(${dest} "${LIBRARY_DIR}" PARENT_SCOPE)
++  else()
++    message(STATUS "Failed to find compiler-rt directory")
++  endif()
++endfunction()
+diff --git a/cmake/config-ix.cmake b/cmake/config-ix.cmake
+index 8a4ca49..93b511a 100644
+--- a/libcxxabi/cmake/config-ix.cmake
++++ b/libcxxabi/cmake/config-ix.cmake
+@@ -2,13 +2,45 @@ include(CheckLibraryExists)
+ include(CheckCCompilerFlag)
+ include(CheckCXXCompilerFlag)
+ 
++check_library_exists(c fopen "" LIBCXXABI_HAS_C_LIB)
++if (NOT LIBCXXABI_USE_COMPILER_RT)
++  check_library_exists(gcc_s __gcc_personality_v0 "" LIBCXXABI_HAS_GCC_S_LIB)
++endif ()
++
++# libc++abi is built with -nodefaultlibs, so we want all our checks to also
++# use this option, otherwise we may end up with an inconsistency between
++# the flags we think we require during configuration (if the checks are
++# performed without -nodefaultlibs) and the flags that are actually
++# required during compilation (which has the -nodefaultlibs). libc is
++# required for the link to go through. We remove sanitizers from the
++# configuration checks to avoid spurious link errors.
++check_c_compiler_flag(-nodefaultlibs LIBCXXABI_HAS_NODEFAULTLIBS_FLAG)
++if (LIBCXXABI_HAS_NODEFAULTLIBS_FLAG)
++  set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -nodefaultlibs")
++  if (LIBCXXABI_HAS_C_LIB)
++    list(APPEND CMAKE_REQUIRED_LIBRARIES c)
++  endif ()
++  if (LIBCXXABI_USE_COMPILER_RT)
++    list(APPEND CMAKE_REQUIRED_FLAGS -rtlib=compiler-rt)
++    find_compiler_rt_library(builtins LIBCXXABI_BUILTINS_LIBRARY)
++    list(APPEND CMAKE_REQUIRED_LIBRARIES "${LIBCXXABI_BUILTINS_LIBRARY}")
++  elseif (LIBCXXABI_HAS_GCC_S_LIB)
++    list(APPEND CMAKE_REQUIRED_LIBRARIES gcc_s)
++  endif ()
++  if (CMAKE_C_FLAGS MATCHES -fsanitize OR CMAKE_CXX_FLAGS MATCHES -fsanitize)
++    set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -fno-sanitize=all")
++  endif ()
++  if (CMAKE_C_FLAGS MATCHES -fsanitize-coverage OR CMAKE_CXX_FLAGS MATCHES -fsanitize-coverage)
++    set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -fno-sanitize-coverage=edge,trace-cmp,indirect-calls,8bit-counters")
++  endif ()
++endif ()
++
+ # Check compiler flags
+ check_c_compiler_flag(-funwind-tables         LIBCXXABI_HAS_FUNWIND_TABLES)
+ check_cxx_compiler_flag(-fPIC                 LIBCXXABI_HAS_FPIC_FLAG)
+ check_cxx_compiler_flag(-fno-exceptions       LIBCXXABI_HAS_NO_EXCEPTIONS_FLAG)
+ check_cxx_compiler_flag(-fno-rtti             LIBCXXABI_HAS_NO_RTTI_FLAG)
+ check_cxx_compiler_flag(-fstrict-aliasing     LIBCXXABI_HAS_FSTRICT_ALIASING_FLAG)
+-check_cxx_compiler_flag(-nodefaultlibs        LIBCXXABI_HAS_NODEFAULTLIBS_FLAG)
+ check_cxx_compiler_flag(-nostdinc++           LIBCXXABI_HAS_NOSTDINCXX_FLAG)
+ check_cxx_compiler_flag(-Wall                 LIBCXXABI_HAS_WALL_FLAG)
+ check_cxx_compiler_flag(-W                    LIBCXXABI_HAS_W_FLAG)
+@@ -44,11 +76,7 @@ if(LIBCXXABI_HAS_STD_CXX11)
+ endif()
+ 
+ # Check libraries
+-check_library_exists(c fopen "" LIBCXXABI_HAS_C_LIB)
+ check_library_exists(dl dladdr "" LIBCXXABI_HAS_DL_LIB)
+ check_library_exists(pthread pthread_once "" LIBCXXABI_HAS_PTHREAD_LIB)
+-if (NOT LIBCXXABI_USE_COMPILER_RT)
+-  check_library_exists(gcc_s __gcc_personality_v0 "" LIBCXXABI_HAS_GCC_S_LIB)
+-endif ()
+ check_library_exists(c __cxa_thread_atexit_impl ""
+   LIBCXXABI_HAS_CXA_THREAD_ATEXIT_IMPL)

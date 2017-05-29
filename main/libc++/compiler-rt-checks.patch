@@ -1,0 +1,70 @@
+From cebb3e984fafb2da3403b75263a983178af9eff2 Mon Sep 17 00:00:00 2001
+From: Petr Hosek <phosek@chromium.org>
+Date: Sun, 16 Apr 2017 02:25:55 +0000
+Subject: [PATCH] [CMake][libcxx] Fix the --target and --gcc-toolchain flag
+ handling
+
+CMake has the problem with the single dash variant because of the
+space, so use the double dash with equal sign version. We also
+don't have to pass the target triple when checking for compiler-rt
+since that flag is already included in compile flags now.
+
+Differential Revision: https://reviews.llvm.org/D32068
+
+git-svn-id: https://llvm.org/svn/llvm-project/libcxx/trunk@300409 91177308-0d34-0410-b5e6-96231b3b80d8
+---
+ CMakeLists.txt                       | 4 ++--
+ cmake/Modules/HandleCompilerRT.cmake | 2 +-
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 9c16dbed5..e2ee1e52d 100644
+--- a/libcxx/CMakeLists.txt
++++ b/libcxx/CMakeLists.txt
+@@ -370,9 +370,9 @@ include(HandleLibcxxFlags)
+ # 'config-ix' use them during feature checks. It also adds them to both
+ # 'LIBCXX_COMPILE_FLAGS' and 'LIBCXX_LINK_FLAGS'
+ add_target_flags_if(LIBCXX_BUILD_32_BITS "-m32")
+-add_target_flags_if(LIBCXX_TARGET_TRIPLE "-target ${LIBCXX_TARGET_TRIPLE}")
++add_target_flags_if(LIBCXX_TARGET_TRIPLE "--target=${LIBCXX_TARGET_TRIPLE}")
+ add_target_flags_if(LIBCXX_SYSROOT "--sysroot=${LIBCXX_SYSROOT}")
+-add_target_flags_if(LIBCXX_GCC_TOOLCHAIN "-gcc-toolchain ${LIBCXX_GCC_TOOLCHAIN}")
++add_target_flags_if(LIBCXX_GCC_TOOLCHAIN "--gcc-toolchain=${LIBCXX_GCC_TOOLCHAIN}")
+ if (LIBCXX_TARGET_TRIPLE)
+   set(TARGET_TRIPLE "${LIBCXX_TARGET_TRIPLE}")
+ endif()
+diff --git a/cmake/Modules/HandleCompilerRT.cmake b/cmake/Modules/HandleCompilerRT.cmake
+index 41cdd44b3..e9da3c43a 100644
+--- a/libcxx/cmake/Modules/HandleCompilerRT.cmake
++++ b/libcxx/cmake/Modules/HandleCompilerRT.cmake
+@@ -3,7 +3,7 @@ function(find_compiler_rt_library name dest)
+     message(FATAL_ERROR "LIBCXX_COMPILE_FLAGS must be defined when using this function")
+   endif()
+   set(dest "" PARENT_SCOPE)
+-  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${TARGET_TRIPLE} ${LIBCXX_COMPILE_FLAGS}
++  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXX_COMPILE_FLAGS}
+       "--rtlib=compiler-rt" "--print-libgcc-file-name")
+   if (CMAKE_CXX_COMPILER_ID MATCHES Clang AND CMAKE_CXX_COMPILER_TARGET)
+     list(APPEND CLANG_COMMAND "--target=${CMAKE_CXX_COMPILER_TARGET}")
+--- a/libcxx/cmake/Modules/HandleCompilerRT.cmake
++++ b/libcxx/cmake/Modules/HandleCompilerRT.cmake
+@@ -3,7 +3,8 @@
+     message(FATAL_ERROR "LIBCXX_COMPILE_FLAGS must be defined when using this function")
+   endif()
+   set(dest "" PARENT_SCOPE)
+-  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXX_COMPILE_FLAGS}
++  separate_arguments(LIBCXX_INIT_FLAGS UNIX_COMMAND "${CMAKE_CXX_COMPILER_ARG1}")
++  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXX_INIT_FLAGS} ${LIBCXX_COMPILE_FLAGS}
+       "--rtlib=compiler-rt" "--print-libgcc-file-name")
+   if (CMAKE_CXX_COMPILER_ID MATCHES Clang AND CMAKE_CXX_COMPILER_TARGET)
+     list(APPEND CLANG_COMMAND "--target=${CMAKE_CXX_COMPILER_TARGET}")
+@@ -28,7 +29,8 @@
+     message(FATAL_ERROR "LIBCXX_COMPILE_FLAGS must be defined when using this function")
+   endif()
+   set(dest "" PARENT_SCOPE)
+-  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXX_COMPILE_FLAGS}
++  separate_arguments(LIBCXX_INIT_FLAGS UNIX_COMMAND "${CMAKE_CXX_COMPILER_ARG1}")
++  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXX_INIT_FLAGS} ${LIBCXX_COMPILE_FLAGS}
+       "--rtlib=compiler-rt" "--print-libgcc-file-name")
+   execute_process(
+       COMMAND ${CLANG_COMMAND}

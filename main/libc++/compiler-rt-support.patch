@@ -1,0 +1,157 @@
+From c51e0d21a1702074241a1541dccbd1ea857bb350 Mon Sep 17 00:00:00 2001
+From: Eric Fiselier <eric@efcs.ca>
+Date: Sat, 11 Mar 2017 03:24:18 +0000
+Subject: [PATCH] Change test coverage generation to use llvm-cov instead of
+ gcov.
+
+Clang doesn't produce gcov compatible coverage files. This
+causes lcov to break because it uses gcov by default. This
+patch switches lcov to use llvm-cov as the gcov-tool.
+
+Unfortunatly llvm-cov doesn't provide a gcov like interface by
+default so it won't work with lcov. However `llvm-cov gcov` does.
+For this reason we generate 'llvm-cov-wrapper' script that always
+passes the gcov flag.
+
+git-svn-id: https://llvm.org/svn/llvm-project/libcxx/trunk@297553 91177308-0d34-0410-b5e6-96231b3b80d8
+---
+ CMakeLists.txt                       |  1 +
+ cmake/Modules/CodeCoverage.cmake     | 18 +++++++++++++--
+ cmake/Modules/HandleCompilerRT.cmake | 43 ++++++++++++++++++++++++++++++++++++
+ lib/CMakeLists.txt                   | 11 +++++----
+ 4 files changed, 65 insertions(+), 8 deletions(-)
+ create mode 100644 cmake/Modules/HandleCompilerRT.cmake
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 45ef0c01f..9e9360ea9 100644
+--- a/libcxx/CMakeLists.txt
++++ b/libcxx/CMakeLists.txt
+@@ -57,6 +57,7 @@ endif()
+ # Setup CMake Options
+ #===============================================================================
+ include(CMakeDependentOption)
++include(HandleCompilerRT)
+ 
+ # Basic options ---------------------------------------------------------------
+ option(LIBCXX_ENABLE_ASSERTIONS "Enable assertions independent of build mode." OFF)
+diff --git a/cmake/Modules/CodeCoverage.cmake b/cmake/Modules/CodeCoverage.cmake
+index addd10abd..1bd3a7868 100644
+--- a/libcxx/cmake/Modules/CodeCoverage.cmake
++++ b/libcx//cmake/Modules/CodeCoverage.cmake
+@@ -3,6 +3,11 @@ if (NOT CODE_COVERAGE_LCOV)
+   message(FATAL_ERROR "Cannot find lcov...")
+ endif()
+ 
++find_program(CODE_COVERAGE_LLVM_COV llvm-cov)
++if (NOT CODE_COVERAGE_LLVM_COV)
++  message(FATAL_ERROR "Cannot find llvm-cov...")
++endif()
++
+ find_program(CODE_COVERAGE_GENHTML genhtml)
+ if (NOT CODE_COVERAGE_GENHTML)
+   message(FATAL_ERROR "Cannot find genhtml...")
+@@ -11,6 +16,14 @@ endif()
+ set(CMAKE_CXX_FLAGS_COVERAGE "-g -O0 --coverage")
+ 
+ function(setup_lcov_test_target_coverage target_name output_dir capture_dirs source_dirs)
++  if (NOT DEFINED LIBCXX_BINARY_DIR)
++    message(FATAL_ERROR "Variable must be set")
++  endif()
++
++  set(GCOV_TOOL "${LIBCXX_BINARY_DIR}/llvm-cov-wrapper")
++  file(GENERATE OUTPUT ${GCOV_TOOL}
++    CONTENT "#!/usr/bin/env bash\n${CODE_COVERAGE_LLVM_COV} gcov \"$@\"\n")
++
+   file(MAKE_DIRECTORY ${output_dir})
+ 
+   set(CAPTURE_DIRS "")
+@@ -27,8 +40,9 @@ function(setup_lcov_test_target_coverage target_name output_dir capture_dirs sou
+   message(STATUS "Extract Directories: ${EXTRACT_DIRS}")
+ 
+   add_custom_target(generate-lib${target_name}-coverage
+-        COMMAND ${CODE_COVERAGE_LCOV} --capture ${CAPTURE_DIRS} -o test_coverage.info
+-        COMMAND ${CODE_COVERAGE_LCOV} --extract test_coverage.info ${EXTRACT_DIRS} -o test_coverage.info
++        COMMAND chmod +x ${GCOV_TOOL}
++        COMMAND ${CODE_COVERAGE_LCOV} --gcov-tool ${GCOV_TOOL} --capture ${CAPTURE_DIRS} -o test_coverage.info
++        COMMAND ${CODE_COVERAGE_LCOV} --gcov-tool ${GCOV_TOOL} --extract test_coverage.info ${EXTRACT_DIRS} -o test_coverage.info
+         COMMAND ${CODE_COVERAGE_GENHTML} --demangle-cpp test_coverage.info -o test_coverage
+         COMMAND ${CMAKE_COMMAND} -E remove test_coverage.info
+         WORKING_DIRECTORY ${output_dir}
+diff --git a/cmake/Modules/HandleCompilerRT.cmake b/cmake/Modules/HandleCompilerRT.cmake
+new file mode 100644
+index 000000000..d7c4247df
+--- /dev/null
++++ b/libcxx/cmake/Modules/HandleCompilerRT.cmake
+@@ -0,0 +1,43 @@
++function(find_compiler_rt_library name dest)
++  if (NOT DEFINED LIBCXX_COMPILE_FLAGS)
++    message(FATAL_ERROR "LIBCXX_COMPILE_FLAGS must be defined when using this function")
++  endif()
++  set(dest "" PARENT_SCOPE)
++  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXX_COMPILE_FLAGS}
++      "--rtlib=compiler-rt" "--print-libgcc-file-name")
++  execute_process(
++      COMMAND ${CLANG_COMMAND}
++      RESULT_VARIABLE HAD_ERROR
++      OUTPUT_VARIABLE LIBRARY_FILE
++  )
++  string(STRIP "${LIBRARY_FILE}" LIBRARY_FILE)
++  string(REPLACE "builtins" "${name}" LIBRARY_FILE "${LIBRARY_FILE}")
++  if (NOT HAD_ERROR AND EXISTS "${LIBRARY_FILE}")
++    message(STATUS "Found compiler-rt library: ${LIBRARY_FILE}")
++    set(${dest} "${LIBRARY_FILE}" PARENT_SCOPE)
++  else()
++    message(STATUS "Failed to find compiler-rt library")
++  endif()
++endfunction()
++
++function(find_compiler_rt_dir dest)
++  if (NOT DEFINED LIBCXX_COMPILE_FLAGS)
++    message(FATAL_ERROR "LIBCXX_COMPILE_FLAGS must be defined when using this function")
++  endif()
++  set(dest "" PARENT_SCOPE)
++  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXX_COMPILE_FLAGS}
++      "--rtlib=compiler-rt" "--print-libgcc-file-name")
++  execute_process(
++      COMMAND ${CLANG_COMMAND}
++      RESULT_VARIABLE HAD_ERROR
++      OUTPUT_VARIABLE LIBRARY_FILE
++  )
++  string(STRIP "${LIBRARY_FILE}" LIBRARY_FILE)
++  get_filename_component(LIBRARY_DIR "${LIBRARY_FILE}" DIRECTORY)
++  if (NOT HAD_ERROR AND EXISTS "${LIBRARY_DIR}")
++    message(STATUS "Found compiler-rt directory: ${LIBRARY_DIR}")
++    set(${dest} "${LIBRARY_DIR}" PARENT_SCOPE)
++  else()
++    message(STATUS "Failed to find compiler-rt directory")
++  endif()
++endfunction()
+diff --git a/lib/CMakeLists.txt b/lib/CMakeLists.txt
+index c6a94e3b8..66bb14c89 100644
+--- a/libcxx/lib/CMakeLists.txt
++++ b/libcxx/lib/CMakeLists.txt
+@@ -32,6 +32,10 @@ endif()
+ add_link_flags_if(LIBCXX_CXX_ABI_LIBRARY_PATH
+                   "${CMAKE_LIBRARY_PATH_FLAG}${LIBCXX_CXX_ABI_LIBRARY_PATH}")
+ 
++
++if (LIBCXX_GENERATE_COVERAGE AND NOT LIBCXX_COVERAGE_LIBRARY)
++  find_compiler_rt_library(profile LIBCXX_COVERAGE_LIBRARY)
++endif()
+ add_library_flags_if(LIBCXX_COVERAGE_LIBRARY "${LIBCXX_COVERAGE_LIBRARY}")
+ 
+ if (APPLE AND (LIBCXX_CXX_ABI_LIBNAME STREQUAL "libcxxabi" OR
+@@ -62,12 +66,7 @@ if (APPLE AND LLVM_USE_SANITIZER)
+     message(WARNING "LLVM_USE_SANITIZER=${LLVM_USE_SANITIZER} is not supported on OS X")
+   endif()
+   if (LIBFILE)
+-    execute_process(COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=lib OUTPUT_VARIABLE LIBDIR RESULT_VARIABLE Result)
+-    if (NOT ${Result} EQUAL "0")
+-      message(FATAL "Failed to find library resource directory")
+-    endif()
+-    string(STRIP "${LIBDIR}" LIBDIR)
+-    set(LIBDIR "${LIBDIR}/darwin/")
++    find_compiler_rt_dir(LIBDIR)
+     if (NOT IS_DIRECTORY "${LIBDIR}")
+       message(FATAL_ERROR "Cannot find compiler-rt directory on OS X required for LLVM_USE_SANITIZER")
+     endif()

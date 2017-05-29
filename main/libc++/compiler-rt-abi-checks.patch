@@ -1,0 +1,79 @@
+From 2ef575d4fb723ef7b38eac031b8fe7d2aaa011c5 Mon Sep 17 00:00:00 2001
+From: Petr Hosek <phosek@chromium.org>
+Date: Sun, 16 Apr 2017 06:08:34 +0000
+Subject: [PATCH] [CMake][libcxxabi] Fix the -target and -gcc-toolchain flag
+ handling
+
+CMake has the problem with the single dash variant because of the
+space, so use the double dash with equal sign version. These flag
+need to be included in compile flags to propagate correctly. We also
+don't have to pass the target triple when checking for compiler-rt
+since that flag is already included in compile flags now.
+
+Differential Revision: https://reviews.llvm.org/D32069
+
+git-svn-id: https://llvm.org/svn/llvm-project/libcxxabi/trunk@300418 91177308-0d34-0410-b5e6-96231b3b80d8
+---
+ CMakeLists.txt                       | 5 +++--
+ cmake/Modules/HandleCompilerRT.cmake | 2 +-
+ 2 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 7e3d97c..505cbfc 100644
+--- a/libcxxabi/CMakeLists.txt
++++ b/libcxxabi/CMakeLists.txt
+@@ -275,6 +275,7 @@ macro(add_target_flags_if condition var)
+   if (${condition})
+     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${var}")
+     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${var}")
++    list(APPEND LIBCXXABI_COMPILE_FLAGS ${var})
+     list(APPEND LIBCXXABI_LINK_FLAGS ${var})
+   endif()
+ endmacro()
+@@ -287,9 +288,9 @@ set(LIBCXXABI_LINK_FLAGS "")
+ # Configure target flags
+ add_target_flags_if(LIBCXXABI_BUILD_32_BITS "-m32")
+ add_target_flags_if(LIBCXXABI_TARGET_TRIPLE
+-          "-target ${LIBCXXABI_TARGET_TRIPLE}")
++          "--target=${LIBCXXABI_TARGET_TRIPLE}")
+ add_target_flags_if(LIBCXXABI_GCC_TOOLCHAIN
+-         "-gcc-toolchain ${LIBCXXABI_GCC_TOOLCHAIN}")
++         "--gcc-toolchain=${LIBCXXABI_GCC_TOOLCHAIN}")
+ add_target_flags_if(LIBCXXABI_SYSROOT
+           "--sysroot=${LIBCXXABI_SYSROOT}")
+ 
+diff --git a/cmake/Modules/HandleCompilerRT.cmake b/cmake/Modules/HandleCompilerRT.cmake
+index 557c69d..395c21a 100644
+--- a/libcxxabi/cmake/Modules/HandleCompilerRT.cmake
++++ b/libcxxabi/cmake/Modules/HandleCompilerRT.cmake
+@@ -3,7 +3,7 @@ function(find_compiler_rt_library name dest)
+     message(FATAL_ERROR "LIBCXXABI_COMPILE_FLAGS must be defined when using this function")
+   endif()
+   set(dest "" PARENT_SCOPE)
+-  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${TARGET_TRIPLE} ${LIBCXXABI_COMPILE_FLAGS}
++  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXXABI_COMPILE_FLAGS}
+       "--rtlib=compiler-rt" "--print-libgcc-file-name")
+   if (CMAKE_CXX_COMPILER_ID MATCHES Clang AND CMAKE_CXX_COMPILER_TARGET)
+     list(APPEND CLANG_COMMAND "--target=${CMAKE_CXX_COMPILER_TARGET}")
+--- a/libcxxabi/cmake/Modules/HandleCompilerRT.cmake
++++ b/libcxxabi/cmake/Modules/HandleCompilerRT.cmake
+@@ -3,7 +3,8 @@
+     message(FATAL_ERROR "LIBCXXABI_COMPILE_FLAGS must be defined when using this function")
+   endif()
+   set(dest "" PARENT_SCOPE)
+-  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXXABI_COMPILE_FLAGS}
++  separate_arguments(LIBCXX_INIT_FLAGS UNIX_COMMAND "${CMAKE_CXX_COMPILER_ARG1}")
++  set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXX_INIT_FLAGS} ${LIBCXXABI_COMPILE_FLAGS}
+       "--rtlib=compiler-rt" "--print-libgcc-file-name")
+   if (CMAKE_CXX_COMPILER_ID MATCHES Clang AND CMAKE_CXX_COMPILER_TARGET)
+     list(APPEND CLANG_COMMAND "--target=${CMAKE_CXX_COMPILER_TARGET}")
+@@ -39,7 +40,8 @@
+     string(STRIP "${LIBRARY_DIR}" LIBRARY_DIR)
+     set(LIBRARY_DIR "${LIBRARY_DIR}/darwin")
+   else()
+-    set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXXABI_COMPILE_FLAGS}
++    separate_arguments(LIBCXX_INIT_FLAGS UNIX_COMMAND "${CMAKE_CXX_COMPILER_ARG1}")
++    set(CLANG_COMMAND ${CMAKE_CXX_COMPILER} ${LIBCXX_INIT_FLAGS} ${LIBCXXABI_COMPILE_FLAGS}
+         "--rtlib=compiler-rt" "--print-libgcc-file-name")
+     execute_process(
+         COMMAND ${CLANG_COMMAND}
