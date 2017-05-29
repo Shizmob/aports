@@ -1,0 +1,38 @@
+--- a/src/cmd/go/build.go
++++ b/src/cmd/go/build.go
+@@ -2945,8 +2945,6 @@
+ 		// libffi.
+ 		ldflags = append(ldflags, "-Wl,-r", "-nostdlib", "-Wl,--whole-archive", "-lgolibbegin", "-Wl,--no-whole-archive")
+ 
+-		if b.gccSupportsNoPie() {
+-			ldflags = append(ldflags, "-no-pie")
+-		}
++		ldflags = b.gccAddNoPieFlag(ldflags)
+ 
+ 		// We are creating an object file, so we don't want a build ID.
+@@ -3173,8 +3173,13 @@
+ // On systems with PIE (position independent executables) enabled by default,
+ // -no-pie must be passed when doing a partial link with -Wl,-r. But -no-pie is
+ // not supported by all compilers.
+-func (b *builder) gccSupportsNoPie() bool {
+-	return b.gccSupportsFlag("-no-pie")
++func (b *builder) gccAddNoPieFlag(flags []string) []string {
++	if b.gccSupportsFlag("-no-pie") {
++		return append(flags, "-no-pie")
++	} else if b.gccSupportsFlag("-nopie") {
++		return append(flags, "-nopie")
++	}
++	return flags
+ }
+ 
+ // gccSupportsFlag checks to see if the compiler supports a flag.
+@@ -3504,8 +3510,6 @@
+ 
+ 	ldflags = append(ldflags, "-Wl,-r", "-nostdlib")
+
+-	if b.gccSupportsNoPie() {
+-		ldflags = append(ldflags, "-no-pie")
+-	}
++	ldflags = b.gccAddNoPieFlag(ldflags)
+ 
+ 	// We are creating an object file, so we don't want a build ID.
