@@ -6,14 +6,19 @@ _pkgname=llvm
 pkgver=4.0.0
 _majorver=${pkgver%%.*}
 pkgname=$_pkgname$_majorver
-pkgrel=6
+pkgrel=7
 pkgdesc="Low Level Virtual Machine compiler system, version $_majorver"
 arch="all"
 url="http://llvm.org/"
 license="UOI-NCSA"
 depends_dev="$pkgname=$pkgver-r$pkgrel"
-makedepends="binutils-dev chrpath cmake file libffi-dev paxmark python2 py-setuptools zlib-dev"
+makedepends_build="chrpath cmake file paxmark python2 py-setuptools"
+makedepends_host="binutils-dev libffi-dev zlib-dev"
 subpackages="$pkgname-static $pkgname-libs $pkgname-dev $pkgname-utils:_utils"
+if [ "$CBUILD" != "$CHOST" ]; then
+	makedepends_build="$makedepends_build $pkgname-utils"
+	subpackages="$subpackages $pkgname-config-$CTARGET_ARCH:_cross_config:$CBUILD_ARCH"
+fi
 source="http://llvm.org/releases/$pkgver/llvm-$pkgver.src.tar.xz
 	llvm-fix-build-with-musl-libc.patch
 	llvm-fix-DynamicLibrary-to-build-with-musl-libc.patch
@@ -77,12 +82,21 @@ build() {
 	cd "$builddir"/build
 
 	# Auto-detect it by guessing either.
-	local ffi_include_dir="$(pkg-config --cflags-only-I libffi | sed 's|^-I||g')"
+	local cross
+	if [ "$CBUILD" != "$CHOST" ] || [ "$CHOST" != "$CTARGET" ]; then
+		cross="	-DCMAKE_CROSSCOMPILING=True
+			-DCMAKE_SYSTEM_NAME=Linux
+			-DCMAKE_SYSTEM_PREFIX_PATH=$CBUILDROOT/usr;$CBUILDROOT
+			-D_CMAKE_TOOLCHAIN_PREFIX=$CTARGET-
+			-DLLVM_TARGET_ARCH=${CTARGET%%-*}
+			-DLLVM_DEFAULT_TARGET_TRIPLE=$CTARGET
+			-DLLVM_TABLEGEN=/$_prefix/bin/llvm-tblgen
+			"
+	fi
 
 	cmake .. -Wno-dev \
 		-DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_INSTALL_PREFIX="/$_prefix" \
-		-DFFI_INCLUDE_DIR="$ffi_include_dir" \
 		-DLLVM_BINUTILS_INCDIR=/usr/include \
 		-DLLVM_BUILD_DOCS=OFF \
 		-DLLVM_BUILD_EXAMPLES=OFF \
@@ -103,7 +117,8 @@ build() {
 		-DLLVM_INCLUDE_EXAMPLES=OFF \
 		-DLLVM_INSTALL_UTILS=ON \
 		-DLLVM_LINK_LLVM_DYLIB=ON \
-		-DLLVM_TARGETS_TO_BUILD='X86;ARM;AArch64;PowerPC;SystemZ;AMDGPU;NVPTX;Mips;BPF'
+		-DLLVM_TARGETS_TO_BUILD='X86;ARM;AArch64;PowerPC;SystemZ;AMDGPU;NVPTX;Mips;BPF' \
+		$cross
 
 	make llvm-tblgen
 	make
@@ -177,6 +192,14 @@ package() {
 	ln -s ../../../cmake/$pkgname lib/cmake/llvm
 }
 
+_cross_config() {
+	pkgdesc="LLVM $_majorver llvm-config ($CTARGET_ARCH)"
+	_common_subpkg
+
+	mkdir -p "$subpkgdir"/$_prefix/bin
+	cp "$builddir"/build/NATIVE/bin/llvm-config "$subpkgdir"/$_prefix/bin/llvm-config-$CTARGET_ARCH
+}
+
 static() {
 	pkgdesc="LLVM $_majorver static libraries"
 	_common_subpkg
@@ -235,6 +258,8 @@ _utils() {
 
 	python2 ../utils/lit/setup.py install --prefix=/usr --root="$subpkgdir"
 	ln -s ../../../bin/lit "$subpkgdir"/$_prefix/bin/lit
+
+	cp bin/llvm-tblgen "$subpkgdir"/$_prefix/bin
 }
 
 _common_subpkg() {
