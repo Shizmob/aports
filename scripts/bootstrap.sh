@@ -3,7 +3,7 @@
 set -e
 
 TARGET_ARCH="$1"
-SUDO_APK=abuild-apk
+: ${SUDO_APK:=abuild-apk}
 
 # optional cross build packages
 KERNEL_PKG="linux-firmware linux-vanilla"
