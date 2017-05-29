@@ -28,7 +28,7 @@ msg() {
 if [ -z "$TARGET_ARCH" ]; then
 	program=$(basename $0)
 	cat <<EOF
-usage: $program TARGET_ARCH
+usage: $program TARGET_ARCH [TOOLCHAIN]
 
 This script creates a local cross-compiler, and uses it to
 cross-compile an Alpine Linux base system for new architecture.
@@ -57,6 +57,9 @@ CBUILDROOT="$(CTARGET=$TARGET_ARCH . /usr/share/abuild/functions.sh ; echo $CBUI
 # deduce aports directory
 [ -z "$APORTS" ] && APORTS=$(realpath $(dirname $0)/../)
 [ -e "$APORTS/main/build-base" ] || die "Unable to deduce aports base checkout"
+[ -z "$2" ] || TOOLCHAIN="$2"
+[ -n "$TOOLCHAIN" ] || TOOLCHAIN="gnu"
+export TOOLCHAIN
 
 if [ ! -d "$CBUILDROOT" ]; then
 	msg "Creating sysroot in $CBUILDROOT"
@@ -70,42 +73,54 @@ msg "Building cross-compiler"
 # Build and install cross binutils (--with-sysroot)
 CTARGET=$TARGET_ARCH BOOTSTRAP=nobase APKBUILD=$(apkbuildname binutils) abuild -r
 
-if ! CHOST=$TARGET_ARCH BOOTSTRAP=nolibc APKBUILD=$(apkbuildname musl) abuild up2date 2>/dev/null; then
-	# C-library headers for target
-	CHOST=$TARGET_ARCH BOOTSTRAP=nocc APKBUILD=$(apkbuildname musl) abuild -r
+case "$TOOLCHAIN" in
+gnu)
+	if ! CHOST=$TARGET_ARCH BOOTSTRAP=nolibc APKBUILD=$(apkbuildname musl) abuild up2date 2>/dev/null; then
+		# C-library headers for target
+		CHOST=$TARGET_ARCH BOOTSTRAP=nocc APKBUILD=$(apkbuildname musl) abuild -r
 
-	# Minimal cross GCC
-	EXTRADEPENDS_HOST="musl-dev" \
-	CTARGET=$TARGET_ARCH BOOTSTRAP=nolibc APKBUILD=$(apkbuildname gcc) abuild -r
+		# Minimal cross GCC
+		EXTRADEPENDS_HOST="musl-dev" \
+		CTARGET=$TARGET_ARCH BOOTSTRAP=nolibc APKBUILD=$(apkbuildname gcc) abuild -r
 
-	# Cross build bootstrap C-library for the target
-	EXTRADEPENDS_BUILD="gcc-pass2-$TARGET_ARCH" \
-	CHOST=$TARGET_ARCH BOOTSTRAP=nolibc APKBUILD=$(apkbuildname musl) abuild -r
-fi
+		# Cross build bootstrap C-library for the target
+		EXTRADEPENDS_BUILD="gcc-pass2-$TARGET_ARCH" \
+		CHOST=$TARGET_ARCH BOOTSTRAP=nolibc APKBUILD=$(apkbuildname musl) abuild -r
+	fi
 
-# Full cross GCC
-EXTRADEPENDS_TARGET="musl musl-dev" \
-CTARGET=$TARGET_ARCH BOOTSTRAP=nobase APKBUILD=$(apkbuildname gcc) abuild -r
+	# Full cross GCC
+	EXTRADEPENDS_TARGET="musl musl-dev" \
+	CTARGET=$TARGET_ARCH BOOTSTRAP=nobase APKBUILD=$(apkbuildname gcc) abuild -r
+	;;
+esac
 
-# Cross build-base
+# Cross remainder of build-base
 CTARGET=$TARGET_ARCH BOOTSTRAP=nobase APKBUILD=$(apkbuildname build-base) abuild -r
 
 msg "Cross building base system"
 
+case "$TOOLCHAIN" in
+gnu)  implicit_deps="libgcc libstdc++ musl-dev";;
+esac
+
 # add implicit target prerequisite packages
-apk info --quiet --installed --root "$CBUILDROOT" libgcc libstdc++ musl-dev || \
-	${SUDO_APK} --root "$CBUILDROOT" add --repository "$REPODEST/main" libgcc libstdc++ musl-dev
+apk info --quiet --installed --root "$CBUILDROOT" $implicit_deps || \
+	${SUDO_APK} --root "$CBUILDROOT" add --repository "$REPODEST/main" $implicit_deps
+
+case "$TOOLCHAIN" in
+gnu)  toolchain="binutils mpf3 mpc1 isl cloog gcc";;
+esac
 
 # ordered cross-build
-for PKG in fortify-headers linux-headers musl libc-dev pkgconf zlib \
+for PKG in fortify-headers linux-headers musl libc-dev pkgconf zlib gmp libffi \
 	   busybox busybox-initscripts binutils make \
 	   libressl libfetch apk-tools \
-	   gmp mpfr3 mpc1 isl cloog gcc \
+	   $toolchain \
 	   openrc alpine-conf alpine-baselayout alpine-keys alpine-base build-base \
 	   attr libcap patch sudo acl fakeroot tar \
 	   pax-utils abuild openssh \
-	   ncurses util-linux lvm2 popt xz cryptsetup kmod lddtree mkinitfs \
-	   community/go libffi testing/ghc \
+	   ncurses libcap-ng util-linux lvm2 popt xz cryptsetup kmod lddtree mkinitfs \
+	   community/go libffi community/ghc \
 	   $KERNEL_PKG ; do
 
 	CHOST=$TARGET_ARCH BOOTSTRAP=bootimage APKBUILD=$(apkbuildname $PKG) abuild -r

@@ -4,14 +4,22 @@ pkgver=0.5
 pkgrel=0
 url=http://dev.alpinelinux.org/cgit
 pkgdesc="Meta package for build base"
-depends="binutils gcc g++ make libc-dev fortify-headers"
+arch="noarch"
+license=none
+depends="libc-dev fortify-headers make"
 if [ "$CHOST" != "$CTARGET" ]; then
 	pkgname="$pkgname-$CTARGET_ARCH"
 	pkgdesc="$pkgdesc ($CTARGET_ARCH)"
-	depends="binutils-$CTARGET_ARCH gcc-$CTARGET_ARCH g++-$CTARGET_ARCH $depends"
 fi
-arch="noarch"
-license=none
+
+case "$TOOLCHAIN" in
+gnu|'')
+	depends="binutils gcc g++ $depends"
+	if [ "$CHOST" != "$CTARGET" ]; then
+		depends="binutils-$CTARGET_ARCH gcc-$CTARGET_ARCH g++-$CTARGET_ARCH $depends"
+	fi
+	;;
+esac
 
 build() {
 	:
