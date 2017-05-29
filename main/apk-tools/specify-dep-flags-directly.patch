@@ -1,0 +1,11 @@
+--- a/Make.rules
++++ b/Make.rules
+@@ -174,7 +174,7 @@
+ #####
+ # Handle options to gcc.
+ 
+-c_flags		= -Wp,-MD,$(depfile),-MT,$@ $(CPPFLAGS) \
++c_flags		= -MD -MF $(depfile) -MT $@ $(CPPFLAGS) \
+ 		  $(CFLAGS_ALL) $(CFLAGS_EXTRA) $(CFLAGS_$(notdir $@))
+ ld_flags	= $(LDFLAGS_ALL) $(LDFLAGS_EXTRA) $(LDFLAGS_$(notdir $@))
+ 
