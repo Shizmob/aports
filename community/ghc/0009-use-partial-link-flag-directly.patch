@@ -1,0 +1,11 @@
+--- a/compiler/main/DriverPipeline.hs
++++ b/compiler/main/DriverPipeline.hs
+@@ -2154,7 +2154,7 @@
+       osInfo = platformOS (targetPlatform dflags)
+       ld_r args cc = SysTools.runLink dflags ([
+                        SysTools.Option "-nostdlib",
+-                       SysTools.Option "-Wl,-r"
++                       SysTools.Option "-r"
+                      ]
+                         -- See Note [No PIE eating while linking] in SysTools
+                      ++ (if sGccSupportsNoPie mySettings
