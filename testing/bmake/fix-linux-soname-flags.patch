@@ -1,0 +1,11 @@
+--- a/mk/lib.mk
++++ b/mk/lib.mk
+@@ -168,7 +168,7 @@
+ .elif ${TARGET_OSNAME} == "Linux"
+ SHLIB_LD = ${CC}
+ # this is ambiguous of course
+-LD_shared=-shared -Wl,"-h lib${LIB}.so.${SHLIB_MAJOR}"
++LD_shared=-shared -Wl,-soname,lib"${LIB}".so.${SHLIB_MAJOR}
+ LD_solib= -Wl,--whole-archive lib${LIB}_pic.a -Wl,--no-whole-archive
+ # Linux uses GNU ld, which is a multi-pass linker
+ # so we don't need to use lorder or tsort

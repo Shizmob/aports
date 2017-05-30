@@ -1,0 +1,40 @@
+--- a/boot-strap
++++ b/boot-strap
+@@ -1,4 +1,4 @@
+-:
++#!/bin/sh
+ # NAME:
+ #	boot-strap
+ #
+--- a/find_lib.sh
++++ b/find_lib.sh
+@@ -1,4 +1,4 @@
+-:
++#!/bin/sh
+ re=$1; shift
+ 
+ for lib in $*
+--- a/install-sh
++++ b/install-sh
+@@ -1,4 +1,4 @@
+-:
++#!/bin/sh
+ # NAME:
+ #	install.sh - portable version of install(1)
+ #
+--- a/machine.sh
++++ b/machine.sh
+@@ -1,4 +1,4 @@
+-:
++#!/bin/sh
+ # derrived from /etc/rc_d/os.sh
+ 
+ # RCSid:
+--- a/mkdeps.sh
++++ b/mkdeps.sh
+@@ -1,4 +1,4 @@
+-:
++#!/bin/sh
+ # NAME:
+ #	mkdeps - generate dependencies
+ #

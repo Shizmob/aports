@@ -1,0 +1,33 @@
+--- a/mk/files.mk
++++ b/mk/files.mk
+@@ -17,7 +17,7 @@
+ 
+ FILES_INSTALL_OWN ?= -o ${SHAREOWN} -g ${SHAREGRP}
+ FILESMODE ?= ${SHAREMODE}
+-FILES_COPY ?= -C
++FILES_COPY ?=
+ 
+ FILESGROUPS ?= FILES
+ FILESGROUPS := ${FILESGROUPS:O:u}
+--- a/mk/inc.mk
++++ b/mk/inc.mk
+@@ -19,7 +19,7 @@
+ INC_INSTALL_OWN ?= -o ${LIBOWN} -g ${LIBGRP}
+ .endif
+ INCMODE ?= 444
+-INC_COPY ?= -C
++INC_COPY ?=
+ INCSDIR ?= ${INCDIR}
+ 
+ STAGE_INCSDIR?= ${STAGE_OBJTOP}${INCSDIR}
+--- a/mk/scripts.mk
++++ b/mk/scripts.mk
+@@ -24,7 +24,7 @@
+ SCRIPTSMODE?=	${BINMODE}
+ 
+ SCRIPTS_INSTALL_OWN?= -o ${SCRIPTSOWN} -g ${SCRIPTSGRP}
+-SCRIPTS_COPY ?= -C
++SCRIPTS_COPY ?=
+ 
+ # how we get script name from src
+ SCRIPTSNAME_MOD?=T:R
