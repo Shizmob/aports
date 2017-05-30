@@ -1,0 +1,13 @@
+--- a/mk/os.Linux.mk
++++ b/mk/os.Linux.mk
+@@ -2,8 +2,8 @@
+ #
+ # Build recipes for GNU/Linux based operating systems.
+ 
+-OS_DISTRIBUTION         != lsb_release -s -i || echo unknown
+-OS_DISTRIBUTION_VERSION != lsb_release -s -r || echo unknown
++OS_DISTRIBUTION         != . /etc/os-release && echo $ID
++OS_DISTRIBUTION_VERSION != . /etc/os-release && echo $VERSION_ID
+ 
+ .if ${OS_DISTRIBUTION} == "unknown" || \
+     ${OS_DISTRIBUTION_VERSION} == "unknown"
