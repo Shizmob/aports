@@ -71,21 +71,23 @@ fi
 msg "Installing dependencies"
 
 if [ "$TOOLCHAIN" = llvm ]; then
-	apk add --virtual .bootstrap-deps compiler-rt clang clang-dev llvm4-utils
+	apk add --virtual .bootstrap-deps compiler-rt clang clang-dev llvm4-utils lld
 	trap 'apk del .bootstrap-deps' EXIT INT
 fi
 
 msg "Building cross toolchain"
 
-# Build and install cross binutils (--with-sysroot)
-CTARGET=$TARGET_ARCH BOOTSTRAP=nobase APKBUILD=$(apkbuildname binutils) abuild -r
-export EXTRADEPENDS_BUILD="binutils-$TARGET_ARCH"
+export EXTRADEPENDS_BUILD
 export EXTRADEPENDS_TARGET
 export CROSSFLAGS
 
 case "$TOOLCHAIN" in
 llvm)
 	CROSSFLAGS="-fuse-ld=lld -Wno-unused-command-line-argument"
+
+	# build elftoolchain
+	CTARGET=$TARGET_ARCH BOOTSTRAP=nobase APKBUILD=$(apkbuildname elftoolchain) abuild -r
+	EXTRADEPENDS_BUILD="elftoolchain-$TARGET_ARCH"
 
 	# libc headers and runtime libraries
 	for PKG in musl-dev compiler-rt; do
@@ -110,6 +112,9 @@ llvm)
 	done
 	;;
 gnu)
+	# Build and install cross binutils (--with-sysroot)
+	CTARGET=$TARGET_ARCH BOOTSTRAP=nobase APKBUILD=$(apkbuildname binutils) abuild -r
+
 	if ! CHOST=$TARGET_ARCH BOOTSTRAP=nolibc APKBUILD=$(apkbuildname musl) abuild up2date 2>/dev/null; then
 		# C-library headers for target
 		CHOST=$TARGET_ARCH BOOTSTRAP=nocc APKBUILD=$(apkbuildname musl) abuild -r
@@ -145,16 +150,19 @@ apk info --quiet --installed --root "$CBUILDROOT" $implicit_deps || \
 
 case "$TOOLCHAIN" in
 gnu)  toolchain="binutils mpf3 mpc1 isl cloog gcc";;
-llvm) toolchain="binutils llvm4 libxml2 isl clang lld";;
+llvm) toolchain="lz4 expat libarchive elftoolchain llvm4 libxml2 isl clang lld";;
 esac
 
 # ordered cross-build
-for PKG in fortify-headers linux-headers musl libc-dev pkgconf zlib gmp libffi \
-	   busybox busybox-initscripts binutils make \
+# build-base after alpine-base omitted because of binutils install conflict
+for PKG in fortify-headers linux-headers musl libc-dev pkgconf zlib \
+	   attr acl gmp libffi \
+	   busybox busybox-initscripts make \
 	   libressl libfetch apk-tools \
+	   gzip bzip2 xz \
 	   $toolchain \
-	   openrc alpine-conf alpine-baselayout alpine-keys alpine-base build-base \
-	   attr libcap patch sudo acl fakeroot tar \
+	   openrc alpine-conf alpine-baselayout alpine-keys alpine-base \
+	   libcap patch sudo fakeroot tar \
 	   pax-utils abuild openssh \
 	   ncurses libcap-ng util-linux lvm2 popt xz cryptsetup kmod lddtree mkinitfs \
 	   community/go libffi community/ghc \
