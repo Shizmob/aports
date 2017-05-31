@@ -1,0 +1,24 @@
+--- a/Makefile
++++ b/Makefile
+@@ -26,7 +26,9 @@
+ SUBDIR += elfcopy
+ SUBDIR += elfdump
+ SUBDIR += findtextrel
++.if defined(WITH_LD) && ${WITH_LD:tl} == "yes"
+ SUBDIR += ld
++.endif
+ SUBDIR += nm
+ SUBDIR += readelf
+ SUBDIR += size
+--- a/mk/elftoolchain.components.mk
++++ b/mk/elftoolchain.components.mk
+@@ -14,6 +14,9 @@
+ # Build the instruction set analyser.
+ WITH_ISA=	no
+ 
++# Build the linker.
++WITH_LD=	yes
++
+ # Build PE support.
+ WITH_PE=	yes
+ 

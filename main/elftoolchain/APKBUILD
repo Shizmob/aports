@@ -1,0 +1,87 @@
+# Contributor: Shiz <hi@shiz.me>
+# Maintainer: Shiz <hi@shiz.me>
+pkgname=elftoolchain
+pkgver=0.7.1
+pkgrel=0
+_tetver=3.8
+pkgdesc="BSD licensed implementations of essential compilation tools and libraries for building and analyzing ELF based program images"
+url="https://sourceforge.net/p/elftoolchain"
+arch="all"
+license="BSD"
+makedepends_build="bmake m4 groff bison flex patch"
+makedepends_host="bsd-compat-headers libarchive-dev zlib-dev"
+subpackages="$pkgname-dev $pkgname-doc"
+source="http://downloads.sourceforge.net/$pkgname/$pkgname-$pkgver.tgz
+	fix-distro-detection.patch
+	make-linker-optional.patch"
+builddir="$srcdir/$pkgname-$pkgver"
+options="!check !strip"  # tests are broken
+replaces="binutils"
+
+_makeflags="MK_PROFILE=no WITH_TESTS=no WITH_LD=no LD_x="
+
+if [ "$CHOST" != "$CTARGET" ]; then
+	pkgname="$pkgname-$CTARGET_ARCH"
+	subpackages=
+	sonameprefix="$pkgname:"
+	makedepends_build="$makedepends_build patchelf"
+	_makeflags="$_makeflags WITH_DOCUMENTATION=no"
+elif [ "$CBUILD" != "$CHOST" ]; then
+	for _prog in CC CXX LD AR RANLIB; do
+		_makeflags="$_makeflags $_prog=$srcdir/$_prog"
+	done
+fi
+
+prepare() {
+	default_prepare
+	if [ "$CBUILD" != "$CHOST" ]; then
+		# bmake behaves badly with toolchain binaries containing spaces.
+		local prog
+
+		LD="$CC"
+		for prog in CC CXX LD; do
+			echo "$prog: $(eval echo "\$$prog")"
+			printf '#!/bin/sh\necho args for $(basename $0): "$@"\nexec %s "$@"' "$(eval echo "\$$prog")" > "$srcdir"/$prog
+			chmod +x "$srcdir"/$prog
+		done
+		for prog in AR RANLIB; do
+			printf '#!/bin/sh\nexec %s%s "$@"' "${CROSS_COMPILE}" "$(echo $prog | tr '[A-Z]' '[a-z]')" > "$srcdir"/$prog
+			chmod +x "$srcdir"/$prog
+		done
+	fi
+}
+
+build() {
+	cd "$builddir"
+
+	# -j1 is needed due some messed up dependencies.
+	bmake -j1 $_makeflags
+}
+
+package() {
+	cd "$builddir"
+	bmake DESTDIR="$pkgdir" $_makeflags install
+
+	cd "$pkgdir"/usr
+	ln -s elfcopy bin/objcopy
+	ln -s elfdump bin/objdump
+
+	if [ "$CHOST" != "$CTARGET" ]; then
+		# remove includes and manpages.
+		rm -r include share
+
+		# migrate /usr to /usr/$CTARGET and symlink back.
+		mkdir -p "$CTARGET"/bin
+		mv lib "$CTARGET"
+
+		local prog; for prog in bin/*; do
+			[ ! -f "$prog" ] || patchelf --set-rpath '$ORIGIN/../lib' "$prog"
+			mv "$prog" "$CTARGET"/bin
+			ln -s ../"$CTARGET"/"$prog" bin/"$CTARGET"-$(basename "$prog")
+		done
+	fi
+}
+
+sha512sums="4978c119532a2e3b32903f05fa3f02c52465ca62bce269344a70916aa40c806b0b91c26eef3e2308693fec668db25599be615f13097364aa548e6080adb637d2  elftoolchain-0.7.1.tgz
+9ec286e9e704fad7b9cfec43a5ffa21543cd8b4fe1ac99702299ed30aad9eebd0bbc35ee846330f4ac71e388176260a9697de2bbf311a71e0170815b646ca303  fix-distro-detection.patch
+ad8343a7b1080c29b0384fa1471a2f75450f125b8c5e8322f138135603e83eb0264203c0233244a69ba3c2716fc28e555866caa1a13d031e9811398c2133db8b  make-linker-optional.patch"
