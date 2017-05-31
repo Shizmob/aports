@@ -13,7 +13,7 @@ url="http://llvm.org/"
 license="UOI-NCSA"
 depends_dev="$pkgname=$pkgver-r$pkgrel"
 makedepends_build="chrpath cmake file paxmark python2 py-setuptools"
-makedepends_host="binutils-dev libffi-dev zlib-dev"
+makedepends_host="libffi-dev zlib-dev"
 subpackages="$pkgname-static $pkgname-libs $pkgname-dev $pkgname-utils:_utils"
 if [ "$CBUILD" != "$CHOST" ]; then
 	makedepends_build="$makedepends_build $pkgname-utils"
@@ -97,7 +97,6 @@ build() {
 	cmake .. -Wno-dev \
 		-DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_INSTALL_PREFIX="/$_prefix" \
-		-DLLVM_BINUTILS_INCDIR=/usr/include \
 		-DLLVM_BUILD_DOCS=OFF \
 		-DLLVM_BUILD_EXAMPLES=OFF \
 		-DLLVM_BUILD_EXTERNAL_COMPILER_RT=ON \
