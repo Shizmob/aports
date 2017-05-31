@@ -1,0 +1,41 @@
+--- a/Makefile
++++ b/Makefile
+@@ -721,7 +721,7 @@
+ ifeq ($(SKIP_STRIP),y)
+ 	$(Q)cp $< $@
+ else
+-	$(Q)$(STRIP) -s --remove-section=.note --remove-section=.comment \
+-		busybox_unstripped -o $@
++	$(Q)$(STRIP) -S --remove-section .note --remove-section .comment \
++ 		busybox_unstripped $@
+ # strip is confused by PIE executable and does not set exec bits
+ 	$(Q)chmod a+x $@
+--- a/scripts/trylink
++++ b/scripts/trylink
+@@ -264,7 +264,7 @@
+ 	cat $EXE.out
+ 	exit 1
+     }
+-    $STRIP -s --remove-section=.note --remove-section=.comment $EXE -o "$sharedlib_dir/libbusybox.so.$BB_VER"
++    $STRIP -S --remove-section .note --remove-section .comment $EXE "$sharedlib_dir/libbusybox.so.$BB_VER"
+     chmod a+x "$sharedlib_dir/libbusybox.so.$BB_VER"
+     echo "libbusybox: $sharedlib_dir/libbusybox.so.$BB_VER"
+ fi
+@@ -285,7 +285,7 @@
+ 	cat $EXE.out
+ 	exit 1
+     }
+-    $STRIP -s --remove-section=.note --remove-section=.comment $EXE -o "$sharedlib_dir/busybox"
++    $STRIP -S --remove-section .note --remove-section .comment $EXE "$sharedlib_dir/busybox"
+     echo "busybox linked against libbusybox: $sharedlib_dir/busybox"
+ fi
+ 
+@@ -322,7 +322,7 @@
+ 	    exit 1
+ 	}
+ 	rm -- "$sharedlib_dir/applet.c" $EXE.out
+-	$STRIP -s --remove-section=.note --remove-section=.comment $EXE
++	$STRIP -S --remove-section .note --remove-section .comment $EXE
+ 	# Let user see that we do something - list the names of created binaries:
+ 	echo "$EXE"
+ 
