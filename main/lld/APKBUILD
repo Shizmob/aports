@@ -8,11 +8,11 @@ pkgdesc="The LLVM Linker"
 url="http://llvm.org"
 arch="all"
 license="UOI-NCSA"
-makedepends_host="llvm-dev>=$_llvmver llvm-static>=$_llvmver llvm-utils zlib-dev"
-makedepends_build="cmake"
+makedepends_host="llvm-dev>=$_llvmver llvm-static>=$_llvmver zlib-dev"
+makedepends_build="cmake llvm-utils>=$_llvmver"
 checkdepends="gtest gtest-dev"
 if [ "$CBUILD" != "$CHOST" ]; then
-	makedepends_build="$makedepends_build llvm-config-$CTARGET_ARCH>=$_llvmver llvm-utils>=$_llvmver"
+	makedepends_build="$makedepends_build llvm-config-$CTARGET_ARCH>=$_llvmver"
 fi
 subpackages="$pkgname-dev"
 source="http://llvm.org/releases/$pkgver/$pkgname-$pkgver.src.tar.xz
