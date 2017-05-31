@@ -1,0 +1,14 @@
+--- a/mk/sys/Linux.mk
++++ b/mk/sys/Linux.mk
+@@ -64,8 +64,10 @@
+ LFLAGS=
+ LEX.l=		${LEX} ${LFLAGS}
+ 
+-LD=		ld
++LD=		cc
+ LDFLAGS=
++LD_x=
++LD_X=
+ 
+ LINT=		lint
+ LINTFLAGS=	-chapbx

@@ -12,7 +12,8 @@ source="http://www.crufty.net/ftp/pub/sjg/bmake-$pkgver.tar.gz
 	fix-tests.patch
 	fix-shebangs.patch
 	fix-linux-soname-flags.patch
-	remove-unportable-install-flags.patch"
+	remove-unportable-install-flags.patch
+	fix-linker-flags.patch"
 builddir="$srcdir/bmake"
 options="!check"  # already automatically done during build
 
@@ -37,4 +38,5 @@ sha512sums="55300e3e375047a400912e62821a179b2a3dfdf61e39c3991fe236c5b63816f854eb
 40a49b3cb80eafb94416adab893621cf4802c2edaaa7a178ba002fab7cf5cd3fc453cdf1538cafcb5020dcd500bc61546f91d05af1450ad64e8c2817746eb18f  fix-tests.patch
 5cb80280b5d93bd5633f70401874052c59715680ece5500f8eeed33bff31ebfb38cbf30f8bc1930465cacd12ecd6a4090369caf261d0d3cefd255a36bbae71dc  fix-shebangs.patch
 9dd42e75831df1cbe765b26248209221bb3a593a532aaa1815e56d2fdef4dfbac2b193d4364240bbabc9ab203569ed246611503682113787b5367378466585de  fix-linux-soname-flags.patch
-88ee9104b15a5d984d43c508df150a2d3e732901149c45cf4de9a7640430aefaabb2da4b4a6ae5b505d84cbb956f2896a3dfaa16c8f7e1af673ad723cc0eccea  remove-unportable-install-flags.patch"
+88ee9104b15a5d984d43c508df150a2d3e732901149c45cf4de9a7640430aefaabb2da4b4a6ae5b505d84cbb956f2896a3dfaa16c8f7e1af673ad723cc0eccea  remove-unportable-install-flags.patch
+2595d9ab7e31947708844c785a6c0a9a7570070e31cf9c21c23fb0e0d0ae5fa205cdcc910736446b0190a34c9472749a6cb9a4901c88bf42f2c998fe5f422c48  fix-linker-flags.patch"

@@ -7,6 +7,7 @@ pkgdesc="Meta package for build base"
 arch="noarch"
 license=none
 depends="libc-dev fortify-headers make"
+
 if [ "$CHOST" != "$CTARGET" ]; then
 	pkgname="$pkgname-$CTARGET_ARCH"
 	pkgdesc="$pkgdesc ($CTARGET_ARCH)"
@@ -14,15 +15,19 @@ fi
 
 case "$TOOLCHAIN" in
 gnu|'')
-	depends="binutils gcc g++ $depends"
+	depends="gcc g++ $depends"
 	if [ "$CHOST" != "$CTARGET" ]; then
 		depends="binutils-$CTARGET_ARCH gcc-$CTARGET_ARCH g++-$CTARGET_ARCH $depends"
+	else
+		depends="binutils $depends"
 	fi
 	;;
 llvm)
-	depends="binutils clang compiler-rt libc++-dev $depends"
+	depends="clang compiler-rt libc++-dev $depends"
 	if [ "$CHOST" != "$CTARGET" ]; then
-		depends="binutils-$CTARGET_ARCH $depends"
+		depends="elftoolchain-$CTARGET_ARCH $depends"
+	else
+		depends="elftoolchain $depends"
 	fi
 	;;
 esac
