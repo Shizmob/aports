@@ -71,8 +71,8 @@ fi
 msg "Installing dependencies"
 
 if [ "$TOOLCHAIN" = llvm ]; then
-	apk add --virtual .bootstrap-deps compiler-rt clang clang-dev llvm4-utils lld
-	trap 'apk del .bootstrap-deps' EXIT INT
+	${SUDO_APK} add --virtual .bootstrap-deps compiler-rt clang clang-dev llvm4-utils lld
+	trap '${SUDO_APK} del .bootstrap-deps' EXIT INT ERR
 fi
 
 msg "Building cross toolchain"
