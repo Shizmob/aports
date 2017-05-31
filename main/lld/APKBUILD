@@ -21,7 +21,8 @@ source="http://llvm.org/releases/$pkgver/$pkgname-$pkgver.src.tar.xz
 	fix-standalone-test-suite.patch
 	add-compatible-with-gnu-linkers-to-version-output.patch
 	print-out-supported-targets.patch
-	implement-znotext.patch"
+	implement-znotext.patch
+	fix-r_gotonly_pc_from_end-relocations.patch"
 builddir="$srcdir/$pkgname-$pkgver.src"
 
 # See the LLVM APKBUILD for rationale.
@@ -75,4 +76,5 @@ sha512sums="66b2c9cc57f5e94ad7e7da1b1bcc08cbbaee1b55c6efa64b2424b9d8776c70b842c2
 03f9cab3efff93a077dd98a7d80feaf974dbde6f07c5604a5a3b7dab9fc5f225e7bb0a13e9a7b781dacf14d1e659546a535e353dba496b570e235311dba0bb5a  fix-standalone-test-suite.patch
 78c5901d2614dd6089544d85505153228c8ea419cf8c0ccddd7cf1945397f6ffb6d2e0fc1f77ceb6946dd3b680c61d458091fd1084324bab1546c5f68c7cb21b  add-compatible-with-gnu-linkers-to-version-output.patch
 0321a810be0c74625532e409f5042424614584a1e5451168580825062bc77915632690a2ed14f37c820306271620d7a11f61e556be1f02313bae844e99119d5b  print-out-supported-targets.patch
-72ab3bc13ced2e8e9d246afcf60dfe8c3a74d6403df4e34d665acb70fb7de692aa32428d5be8f5b5ee65d2b9026b2aa9d66577890a057aeb5d08926856e6d750  implement-znotext.patch"
+72ab3bc13ced2e8e9d246afcf60dfe8c3a74d6403df4e34d665acb70fb7de692aa32428d5be8f5b5ee65d2b9026b2aa9d66577890a057aeb5d08926856e6d750  implement-znotext.patch
+21a8adb5110e19a22dbf027f935fda9ff48ee136c0b8c6fccf5034f07065b35aa41122c818997ed150138bbd251e31944d3dcc73def606b62c248fccc47ab785  fix-r_gotonly_pc_from_end-relocations.patch"

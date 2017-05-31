@@ -1,0 +1,63 @@
+From: George Rimar <grimar@accesssoftek.com>
+Upstream: https://reviews.llvm.org/D33717
+
+This is PR33243. R_GOTONLY_PC_FROM_END was not in a list of link time constant
+expressions and that was a result of confusiing messages like PR shows:
+
+/usr/bin/ld.lld: error: /usr/lib/go/src/runtime/alg.go:47: 
+can't create dynamic relocation R_386_GOTPC against local symbol in readonly segment defined in /tmp/nice/go-link-597453838/go.o
+
+Though in reality we just should not have try to create a dynamic relocation for this case at all.
+
+Patch fixes the issue.
+
+Index: ELF/Relocations.cpp
+===================================================================
+--- a/ELF/Relocations.cpp
++++ b/ELF/Relocations.cpp
+@@ -319,7 +319,7 @@
+                                      typename ELFT::uint RelOff) {
+   // These expressions always compute a constant
+   if (isRelExprOneOf<R_SIZE, R_GOT_FROM_END, R_GOT_OFF, R_MIPS_GOT_LOCAL_PAGE,
+-                     R_MIPS_GOT_OFF, R_MIPS_GOT_OFF32, R_MIPS_TLSGD,
++                     R_MIPS_GOT_OFF, R_MIPS_GOT_OFF32, R_MIPS_TLSGD, R_GOTONLY_PC_FROM_END,
+                      R_GOT_PAGE_PC, R_GOT_PC, R_PLT_PC, R_TLSGD_PC, R_TLSGD,
+                      R_PPC_PLT_OPD, R_TLSDESC_CALL, R_TLSDESC_PAGE, R_HINT,
+                      R_THUNK_PC, R_THUNK_PLT_PC>(E))
+Index: test/ELF/i386-gotpc-dynamic.s
+===================================================================
+--- a/test/ELF/i386-gotpc-dynamic.s
++++ b/test/ELF/i386-gotpc-dynamic.s
+@@ -0,0 +1,32 @@
++# REQUIRES: x86
++# RUN: llvm-mc -filetype=obj -triple=i686-pc-linux %s -o %t.o
++# RUN: ld.lld %t.o -o %t.so -shared
++# RUN: llvm-readobj -s %t.so | FileCheck %s
++# RUN: llvm-objdump -d %t.so | FileCheck --check-prefix=DISASM %s
++
++# CHECK:       Section {
++# CHECK:        Index: 7
++# CHECK-NEXT:   Name: .got
++# CHECK-NEXT:   Type: SHT_PROGBITS
++# CHECK-NEXT:   Flags [
++# CHECK-NEXT:     SHF_ALLOC
++# CHECK-NEXT:     SHF_WRITE
++# CHECK-NEXT:   ]
++# CHECK-NEXT:   Address: 0x2030
++# CHECK-NEXT:   Offset:
++# CHECK-NEXT:   Size:
++# CHECK-NEXT:   Link:
++# CHECK-NEXT:   Info:
++# CHECK-NEXT:   AddressAlignment:
++# CHECK-NEXT:   EntrySize:
++# CHECK-NEXT: }
++
++## 0x1000 + 4144 = 0x2030
++# DISASM: 1000: {{.*}} movl $4144, %eax
++
++.section .foo,"ax",@progbits
++foo:
++ movl $bar@got-., %eax # R_386_GOTPC
++
++.local bar
++bar:
